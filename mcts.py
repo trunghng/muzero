@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Callable
 import math
 import random
 from copy import deepcopy
@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from game import ActType, PlayerType
-from network import Network
+from network import MuZeroNetwork
 
 
 class Node:
@@ -35,17 +35,15 @@ class Node:
     def expand(self,
             reward: float,
             hidden_state: torch.Tensor,
-            policy_logits: torch.Tensor,
+            policy: torch.Tensor,
             to_play: PlayerType,
             actions: List[ActType]) -> None:
         self.to_play = to_play
         self.reward = reward
         self.hidden_state = hidden_state
 
-        policy = {a: math.exp(policy_logits[i]) for i, a in enumerate(actions)}
-        policy_sum = sum(policy.values())
-        for a, p in policy.items():
-            self.children[a] = Node(p / policy_sum)
+        for i, a in enumerate(actions):
+            self.children[a] = Node(policy[i])
 
 
 class MinMaxStats:
@@ -113,8 +111,8 @@ class MCTS:
 
     def backpropagate(self,
                     search_path: List[Node],
-                    value: PlayerType,
-                    to_play: int,
+                    value: float,
+                    to_play: PlayerType,
                     min_max_stats: MinMaxStats) -> None:
         for node in reversed(search_path):
             node.value_sum += value if node.to_play == to_play else -value
@@ -124,15 +122,17 @@ class MCTS:
             value = node.reward + self.config.gamma * value
 
 
-    def select_action(self, root: Node, trained_steps: int) -> ActType:
+    def select_action(self, root: Node, training_step: int) -> ActType:
         """
         Select action according to
             pi(a|s_0) = N(s_0,a)^(1/tau) / sum_b(N(s_0,b)^(1/t))
-
         If t = 0, pi is deterministic, returns the action with max #visits
+
+        :param root: root node
+        :param training_step: current training step
         """
         visit_counts = {action: child.visit_count for action, child in root.children.items()}
-        t = self.config.visit_softmax_temperature_fn(self.config.training_steps, trained_steps)
+        t = self.config.visit_softmax_temperature_fn(self.config.training_steps, training_step)
 
         if t == 0:
             max_visits = max(visit_counts.values())
@@ -141,25 +141,39 @@ class MCTS:
             total_visits = float(sum(visit_counts.values()))
             idx = np.random.choice(range(len(visit_counts.keys())), p=[v / total_visits for v in visit_counts.values()])
             action = list(visit_counts.keys())[idx]
-
         return action
 
 
+    def action_probabilities(self, root: Node) -> List[float]:
+        total_visits = float(sum([child.visit_count for child in root.children.values()]))
+        action_probabilities = [
+            root.children[self.idx_to_action(idx)].visit_count / total_visits \
+            if self.idx_to_action(idx) in root.children else 0 \
+            for idx in range(len(self.config.action_space))
+        ]
+
+
     def search(self,
-            network: Network,
+            network: MuZeroNetwork,
             observation: np.ndarray,
             legal_actions: List[ActType],
-            action_history: List[ActType]) -> Node:
+            action_history: List[ActType],
+            action_encoder: Callable,
+            to_play: PlayerType) -> Node:
         """
-        s_t^0 = h(o_1,...,o_t)
-        p_t^0, v_t^0 = f(s_t^0)
+        Run a MCTS search
+
+        :param network: MuZero model
+        :param observation: past observations
+        :param legal_actions: legal actions of the current game state
+        :param action_encoder: action encoder, varies on each game
+        :param to_play: current player to play
         """
+        # s_t^0 = h(o_1,...,o_t)
+        # p_t^0, v_t^0 = f(s_t^0)
         root = Node(0)
-        value, reward, policy_logits, hidden_state = network.initial_inference(torch.as_tensor(observation))
-        value = network.support_to_scalar(value)
-        reward = network.support_to_scalar(reward)
-        to_play = (len(action_history) + 1) % self.config.players
-        root.expand(reward, policy_logitts, hidden_state, to_play, legal_actions)
+        policy, hidden_state, value = network.initial_inference(torch.as_tensor(observation))
+        root.expand(reward, policy, hidden_state, to_play, legal_actions)
         self.add_exploration_noise(root)
 
         min_max_stats = MinMaxStats()
@@ -178,12 +192,13 @@ class MCTS:
             r^l, s^l = g(s^{l-1}, a^l)
             '''
             parent = search_path[-2]
-            value, reward, policy_logits, hidden_state = network.recurrent_inference(parent.hidden_state, history[-1])
-            value = network.support_to_scalar(value)
-            reward = network.support_to_scalar(reward)
+            policy, hidden_state, value, reward = network.recurrent_inference(
+                parent.hidden_state,
+                torch.as_tensor(action_encoder(history[-1])).unsqueeze(0).unsqueeze(0)
+            )
     
             to_play = len(history) % self.config.players
-            node.expand(reward, policy_logits, hidden_state, to_play, self.config.action_space)
+            node.expand(reward, policy, hidden_state, to_play, self.config.action_space)
 
             self.backpropagate(search_path, value, to_play, min_max_stats)
         return root

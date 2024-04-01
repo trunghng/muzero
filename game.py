@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, TypeVar
-import string
 
 import numpy as np
 
-import utils
+from game_utils import idx_to_cell, cell_to_idx, draw_board
 
 
 ObsType = TypeVar('ObsType')
@@ -15,8 +14,11 @@ PlayerType = TypeVar('PlayerType')
 class Game(ABC):
     """Game abstract class"""
 
-    def __init__(self, seed: int=None) -> None:
-        """"""
+    def __init__(self,
+                players: int,
+                seed: int=None) -> None:
+        self.players = players
+
 
     @abstractmethod
     def reset(self) -> ObsType:
@@ -31,15 +33,15 @@ class Game(ABC):
         """"""
 
     @abstractmethod
-    def to_play(self) -> PlayerType:
-        """"""
-
-    @abstractmethod
-    def get_observation(self) -> ObsType:
-        """"""
-
-    @abstractmethod
     def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
+        """"""
+
+    @abstractmethod
+    def observation(self) -> ObsType:
+        """"""
+
+    @abstractmethod
+    def action_encoder(self, action: ActType) -> ActType:
         """"""
 
     @abstractmethod
@@ -49,88 +51,151 @@ class Game(ABC):
 
 class GameHistory:
     """
-    For non-board games, an action does not necessarily have a visible effect on 
+    For atari games, an action does not necessarily have a visible effect on 
     the observation, we encode historical actions into the stacked observation.
     """
 
-    def __init__(self,
-                game: Game,
-                gamma: float,
-                board_game: bool=True) -> None:
-        self.observation_history = []
-        self.action_history = []
-        self.reward_history = []
-        self.to_play_history = []
-        self.child_visits = []
-        self.game = game
-        self.gamma = gamma
-        self.board_game = board_game
-        
-        self.store_experience(game.get_observation(), None, 0, game.to_play())
+    def __init__(self, game_type: str='board_game') -> None:
+        self.observations = []          # o_t: State observations
+        self.actions = []               # a_{t+1}: Action leading to transition s_t -> s_{t+1}
+        self.rewards = []               # u_{t+1}: Observed reward after performing a_{t+1}
+        self.to_plays = []              # p_t: Current player
+        self.action_probabilities = []  # pi_t: Action probabilities produced by MCTS
+        self.root_values = []           # v_t: MCTS value estimation
+        self.game_type = game_type
 
 
     def __len__(self) -> int:
-        return len(self.action_history)
+        return len(self.observations)
 
 
-    def store_experience(self,
-                        observation: ObsType,
-                        action: ActType,
-                        reward: float,
-                        to_play: PlayerType) -> None:
-        self.observation_history.append(observation)
-        self.action_history.append(action)
-        self.reward_history.append(reward)
-        self.to_play_history.append(to_play)
+    def save(self,
+            observation: ObsType,
+            action: ActType,
+            reward: float,
+            to_play: PlayerType,
+            pi: List[float],
+            root_value: float) -> None:
+        self.observations.append(observation)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.to_plays.append(to_play)
+        self.action_probabilities.append(pi)
+        self.root_values.append(root_value)
 
 
-    def store_search_statistics(self,
-                                root,
-                                action_space_size: int) -> None:
-        pass
+    def stack_observations(self,
+                        t: int,
+                        n_stacked_observations: int,
+                        action_space_size: int) -> np.ndarray:
+        """
+        Stack 'n_stacked_observations' most recent observations (and corresponding 
+        actions lead to the states with atari) upto 't':
+            o_{t - n_stacked_observations + 1}, ..., o_t
+
+        :param t: time step of the latest observation to stack
+        :param n_stacked_observations: number of observations to stack
+        :param action_space_size: size of the action space
+        """
+        # Convert to positive index
+        t = t % len(self)
+        n_stacked_observations_ = min(n_stacked_observations, t + 1)
+        planes = []
+
+        for step in reversed(range(t - n_stacked_observations_ + 1, t + 1)):
+            planes.append(self.observations[step])
+            if self.game_type == 'atari':
+                planes.append(np.full_like(self.observations[step], self.actions[step] / action_space_size))
+
+        # If n_stack_observations > t + 1, we attach planes of zeros instead
+        for _ in range(n_stacked_observations - n_stacked_observations_):
+            planes.append(np.zeros_like(self.observations[step]))
+            if self.game_type == 'atari':
+                planes.append(np.zeros_like(self.observations[step]))
+
+        return np.concatenate(planes, axis=0)
 
 
-    def get_stacked_observations(self,
-                                time_step: int,
-                                n_stacked_observations: int,
-                                action_space_size: int) -> np.ndarray:
-        time_step = time_step % len(self)
+    def make_target(self,
+                    t: int,
+                    td_steps: int,
+                    gamma: float,
+                    unroll_steps: int,
+                    action_space: List[int]) -> Tuple[List[float], List[float], List[List[float]]]:
+        """
+        Create targets for every unroll steps
 
-        if self.board_game:
+        :param t: current time step
+        :param td_steps: n-step TD
+        :param gamma: discount factor
+        :param unroll_steps: number of unroll steps
+        :param action_space: action space
+        :return: value targets, reward targets, policy targets
+        """
+        value_targets, reward_targets, policy_targets = [], [], []
 
-            def _stack_obs(to_play: PlayerType):
-                obs_list = []
-                for obs in reversed(self.observation_history[time_step - n_stacked_observations + 1: time_step + 1]):
-                    obs_list.append(np.where(obs == to_play, 1, 0))
+        def _compute_value_target(step: int) -> float:
+            """
+            Compute value target
+            - For board games, value target is the total reward from the current index til the end
+            - For other games, value target is the discounted root value of the search tree
+            'td_steps' into the future, plus the discounted sum of all rewards until then
 
-                return np.stack(obs_list)
+            z_t = u_{t+1} + gamma * u_{t+2} + ... + gamma^{n-1} * u_{t+n} + gamma^n * v_{t+n} 
+            """
+            if self.game_type == 'board_game':
+                rewards = []
+                for i in range(step, len(self)):
+                    rewards.append(self.rewards[i] if self.to_plays[i] == self.to_plays[step] else -self.rewards[i])
+                value = sum(rewards)
+            else:
+                bootstrap_step = step + td_steps
+                if bootstrap_step < len(self):
+                    bootstrap = self.root_values[bootstrap_step] if self.to_plays[bootstrap_step] == self.to_plays[step]\
+                                    else -self.root_values[bootstrap_step]
+                    bootstrap *= gamma ** td_steps
+                else:
+                    bootstrap = 0
 
-            p1_planes = _stack_obs(-1)
-            p2_planes = _stack_obs(1)
-            to_play_plane = np.full(self.game.board.shape, self.to_play_history[time_step])
+                discounted_rewards = [
+                    (self.rewards[k] if self.to_plays[step + k] == self.to_plays[step] else -reward) * gamma ** k
+                    for k in range(step + 1, bootstrap_step + 1)
+                ]
+                value = sum(discounted_rewards) + bootstrap
+            return value
 
-            return np.concatenate([p1_planes, p2_planes, np.expand_dims(to_play_plane, 0)])
-        else:
-            
+        for step in range(t, t + unroll_steps + 1):
+            value = _compute_value_target(step)
 
+            if step < len(self):
+                value_targets.append(value)
+                reward_targets.append(self.rewards[step])
+                policy_targets.append(self.action_probabilities[step])
+            else:
+                value_targets.append(0)
+                reward_targets.append(None)
+                policy_targets.append([])
+
+        return value_targets, reward_targets, policy_targets
 
 
 class TicTacToe(Game):
 
     def __init__(self, size: int=3) -> None:
+        super().__init__(players=2)
         self.size = size
+        # -1, 1, 0 denote X, O, empty respectively
         self.board = np.zeros((size, size))
+        # X moves first
+        self.to_play = -1
         self.winner = None
-
-        self._row_indices = string.ascii_lowercase
-        self._col_indices = range(1, len(self._row_indices) + 1)
-        self._pieces = {-1: 'X', 1: 'O', 0: ' '}
 
 
     def reset(self) -> ObsType:
-        self.winner = None
         self.board = np.zeros((self.size, self.size))
-        return self.get_observation()
+        self.to_play = -1
+        self.winner = None
+        return self.observation()
 
 
     def terminated(self) -> bool:
@@ -167,65 +232,30 @@ class TicTacToe(Game):
 
 
     def legal_actions(self) -> List[ActType]:
-        empty_cells = np.argwhere(state == 0)
-        return [utils.cell2idx(c, self.size) for c in empty_cells]
-
-
-    def to_play(self) -> PlayerType:
-        nonzero = np.count_nonzero(self.board)
-        return -1 if nonzero % 2 == 0 else 1
-
-
-    def get_observation(self) -> ObsType:
-        return self.board
+        empty_cells = np.argwhere(self.board == 0)
+        return [cell_to_idx(c, self.size) for c in empty_cells]
 
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
-        self.board[utils.idx2cell(action, self.size)] = self.to_play()
+        self.board[idx_to_cell(action, self.size)] = self.to_play
+        self.to_play *= -1
         terminated = self.terminated()
         reward = 1 if self.winner is not None else 0
-        return self.get_observation(), reward, terminated
+        return self.observation(), reward, terminated
+
+
+    def observation(self) -> ObsType:
+        p1_plane = np.where(self.board == -1, 1, 0)
+        p2_plane = np.where(self.board == 1, 1, 0)
+        to_play_plane = np.full_like(self.board, self.to_play)
+        return np.array([p1_plane, p2_plane, to_play_plane])
+
+
+    def action_encoder(self, action: ActType) -> ActType:
+        one_hot_action = np.zeros((self.size, self.size))
+        one_hot_action[idx_to_cell(action, self.size)] = 1
+        return one_hot_action
     
 
     def render(self) -> None:
-        col_indices_txt = '  '
-        rows, cols = self.size, self.size
-        for i in range(cols):
-            col_indices_txt += '  ' + str(self._col_indices[i]) + ' '
-
-        print(col_indices_txt)
-        print('  +' + '---+' * cols)
-        for i in range(rows):
-            board_row = self._row_indices[i] + ' | '
-            for j in range(cols):
-                piece = self._pieces[self.board[i, j]]
-                board_row += piece + ' | '
-            print(board_row)
-            print('  +' + '---+' * cols)
-
-if __name__ == '__main__':
-    g = TicTacToe()
-    h = GameHistory(g, 0)
-    g.render()
-    a = 0
-    o, r, d = g.step(a)
-    t = g.to_play()
-    h.store_experience(o, a, r, t)
-    g.render()
-    a = 5
-    o, r, d = g.step(a)
-    t = g.to_play()
-    h.store_experience(o, a, r, t)
-    g.render()
-    a = 3
-    o, r, d = g.step(a)
-    t = g.to_play()
-    h.store_experience(o, a, r, t)
-    g.render()
-    a = 6
-    o, r, d = g.step(a)
-    t = g.to_play()
-    h.store_experience(o, a, r, t)
-    g.render()
-    print(h.get_stacked_observations(3, 2, 9))
-
+        draw_board(self.board, {-1: 'X', 1: 'O', 0: ' '})

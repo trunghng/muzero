@@ -1,71 +1,56 @@
 import argparse
 
-import game
-from utils import VisitSoftmaxTemperatureFn
-from muzero import MuZero
+from game import Game, TicTacToe
+from arena import Arena
+from player import Player, RandomPlayer, HumanPlayer, MuZeroPlayer
+
+
+def create_player(player: str) -> Player:
+    if player == 'random':
+        return RandomPlayer()
+    elif player == 'human':
+        return HumanPlayer()
+    else:
+        return MuZeroPlayer()
+
+
+def create_game(name: str, boardsize: int) -> Game:
+    if name == 'tictactoe':
+        return TicTacToe(boardsize)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='MuZero')
-    parser.add_argument('--game-name', type=str, choices=['tictactoe'], default='tictactoe',
-                        help='Environment name')
-    tictactoe_args = parser.add_argument_group('TicTacToe arguments')
-    tictactoe_args.add_argument('--tictactoe-size', type=int, default=3,
-                                help='Board size')
-    data_gen_args = parser.add_argument_group('Data generation arguments')
-    data_gen_args.add_argument('--seed', type=int, default=0,
-                                help='Seed for RNG')
-    data_gen_args.add_argument('--games', type=int, default=200,
-                                help='Number of self-play games to play')
-    data_gen_args.add_argument('--gamma', type=float, default=1.0,
-                                help='Discount factor')
-    data_gen_args.add_argument('--max-moves', type=int, default=18,
-                                help='Maximum total number of moves per game')
-    data_gen_args.add_argument('--n-stacked-observations', type=int, default=1,
-                                help='Number of previous observations (and previous actions) to add to the current observation')
-    data_gen_args.add_argument('--buffer-size', type=int, default=10000,
-                                help='Replay buffer size')
-    data_gen_args.add_argument('--n-simulations', type=int, default=50,
-                                help='Number of simulations to run MCTS')
-    data_gen_args.add_argument('--dirichlet-alpha', type=float, default=1.1,
-                                help='Alpha in Dirichlet(alpha) to sample noise, used for exploration (=10/max_pos_moves)')
-    data_gen_args.add_argument('--exploration-frac', type=float, default=0.25,
-                                help='Exploration fraction for Dirichlet noise injection')
-    data_gen_args.add_argument('--c-base', type=int, default=19652,
-                                help='PUCT parameter c_base')
-    data_gen_args.add_argument('--c-init', type=float, default=1.25,
-                                help='PUCT parameter c_init')
-    network_training_args = parser.add_argument_group('Network training arguments')
-    network_training_args.add_argument('--training-steps', type=int, default=1000,
-                                        help='Number of steps to train the neural network')
-    network_training_args.add_argument('--lr', type=float, default=1e-3,
-                                        help='Learning rate for network optimizer')
-    network_training_args.add_argument('--checkpoint-interval', type=int, default=10,
-                                        help='')
-    network_training_args.add_argument('--weight-decay', type=float, default=1e-4,
-                                        help='L2 regularization parameter')
-    network_training_args.add_argument('--batch-size', type=int, default=64,
-                                        help='Mini-batch size')
-    network_training_args.add_argument('--savedir', type=str,
-                                        help='Directory to save the network')
+
+    mode_parsers = parser.add_subparsers(title='Modes')
+
+    play_parser = mode_parsers.add_parser('play')
+    play_parser.set_defaults(mode='play')
+    player_choices = ['random', 'human', 'muzero']
+    play_parser.add_argument('--p1', type=str, choices=player_choices, default='human',
+                            help='Player 1')
+    play_parser.add_argument('--p1-config', type=str, help='Config folder')
+    play_parser.add_argument('--p2', type=str, choices=player_choices, default='human',
+                            help='Player 2')
+
+    train_parser = mode_parsers.add_parser('train')
+    train_parser.set_defaults(mode='train')
+    train_parser.add_argument_group('Self-play arguments')
+    train_parser.add_argument_group('Network training arguments')
+
+    for p in [play_parser, train_parser]:
+        p.add_argument('--game', type=str, default='tictactoe', help='Game name')
+        p.add_argument('--boardsize', type=int, default=3, help='Board size (if relevant)')
+
     args = parser.parse_args()
-    vst = VisitSoftmaxTemperatureFn()
 
-    initializers = {
-        'tictactoe': {
-            'obj': game.TicTacToe(args.tictactoe_size),
-            'players': 2,
-            'action_space': list(range(args.tictactoe_size ** 2)),
-            'visit_softmax_temperature_fn': vst.tictactoe,
-        },
-    }
+    if args.mode == 'play':
+        game = create_game(args.game, args.boardsize)
 
-    init = initializers[args.game_name]
-    game = init['obj']
-    args.players = init['players']
-    args.action_space = init['action_space']
-    args.visit_softmax_temperature_fn = init['visit_softmax_temperature_fn']
-    del args.game_name
-
-    agent = MuZero(game, args)
-    agent.run()
+        if game.players == 2:
+            p1 = create_player(args.p1)
+            p2 = create_player(args.p2)
+            arena = Arena(p1, p2, game)
+            arena.run(True)
+    elif args.mode == 'train':
+        pass
