@@ -1,4 +1,4 @@
-from typing import List, Callable
+from typing import List, Callable, Dict
 
 import numpy as np
 import torch
@@ -45,11 +45,11 @@ def support_to_scalar(probabilities: torch.Tensor,
     :param probabilities: Tensor represents categorical distributions
     :param support_limit: Number of categories indicating range symmetric around 0
     :param inv_scalar_transformer: Inverse of the function that scaled scalars before converting to distributions
-    :param kwarg: Keyword arguments for inv_scalar_transformer
+    :param kwargs: Keyword arguments for inv_scalar_transformer
     """
     support = torch.arange(-support_limit, support_limit + 1)
     x = np.dot(probabilities, support)
-    x = inv_scalar_transformer(torch.as_tensor(x))
+    x = inv_scalar_transformer(torch.as_tensor(x), **kwargs)
     return x
 
 
@@ -63,11 +63,16 @@ def scalar_to_support(x: torch.Tensor,
     :param x: Tensor of scalars
     :param support_limit: Number of categories indicating range symmetric around 0
     :param scalar_transformer: Function to scale scalars before conversion
-    :param kwarg: Keyword arguments for scalar_transformer
+    :param kwargs: Keyword arguments for scalar_transformer
     """
     x = scalar_transformer(x, **kwargs)
     x = torch.clamp(x, min=-support_limit, max=support_limit)
-    # TODO
+    floor = x.floor().int()
+    prob = x - floor
+    probabilities = torch.zeros((len(x), support_limit * 2 + 1))
+    probabilities[:, floor + support_limit] = 1 - prob
+    probabilities[:, floor + support_limit + 1] = prob
+    return probabilities
 
 
 def normalize_hidden_state(hidden_states: torch.Tensor) -> torch.Tensor:
@@ -84,3 +89,12 @@ def normalize_hidden_state(hidden_states: torch.Tensor) -> torch.Tensor:
     hidden_states_min = torch.min(hidden_state_, dim=2, keep_dim=True)[0].unsqueeze(-1)
     hidden_states_scaled = (hidden_states - hidden_states_min) / (hidden_states_max - hidden_states_min + 1e-5)
     return hidden_states_scaled
+
+
+def scale_gradient(x: torch.Tensor, scale_factor: float) -> torch.Tensor:
+    """Scale gradients for reverse differentiation proportional to the given scale"""
+    x.register_hook(lambda grad: grad * scale_factor)
+
+
+def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    return {k: v.cpu() for k, v in state_dict.items()}

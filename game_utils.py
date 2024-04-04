@@ -6,9 +6,9 @@ import numpy as np
 
 class VisitSoftmaxTemperatureFn:
 
-    def tictactoe(self, training_steps: int, training_step: int) -> float:
+    def tictactoe(self, n_training_steps: int, training_step: int) -> float:
         """
-        :param training_steps: number of training steps
+        :param n_training_steps: number of training steps
         :param training_step: current training step
         """
         return 1.0

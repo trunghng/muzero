@@ -35,15 +35,18 @@ class Node:
     def expand(self,
             reward: float,
             hidden_state: torch.Tensor,
-            policy: torch.Tensor,
+            policy_logits: torch.Tensor,
             to_play: PlayerType,
             actions: List[ActType]) -> None:
         self.to_play = to_play
         self.reward = reward
         self.hidden_state = hidden_state
 
-        for i, a in enumerate(actions):
-            self.children[a] = Node(policy[i])
+        policy = {a: math.exp(policy_logits[0][a]) for a in actions}
+        policy_sum = sum(policy.values())
+
+        for a in actions:
+            self.children[a] = Node(policy[a] / policy_sum)
 
 
 class MinMaxStats:
@@ -77,10 +80,10 @@ class MCTS:
             P(s,a) = (1 - exploration_frac) * P(s,a) + exploration_frac * noise
         """
         actions = node.children.keys()
-        noises = np.random.dirichlet(self.config.dirichlet_alpha, len(actions))
+        noises = np.random.dirichlet(self.config.root_dirichlet_alpha, len(actions))
         for a, n in zip(actions, noises):
-            node.children[a].prior = (1 - self.config.exploration_frac) * node.children[a].prior\
-                                        + self.config.exploration_frac * n
+            node.children[a].prior = (1 - self.config.root_exploration_fraction) * node.children[a].prior\
+                                        + self.config.root_exploration_fraction * n
 
 
     def ucb_score(self,
@@ -114,12 +117,19 @@ class MCTS:
                     value: float,
                     to_play: PlayerType,
                     min_max_stats: MinMaxStats) -> None:
-        for node in reversed(search_path):
-            node.value_sum += value if node.to_play == to_play else -value
-            node.visit_count += 1
-            min_max_stats.update(node.value())
+        if self.config.players == 1:
+            for node in reversed(search_path):
+                node.value_sum += value
+                node.visit_count += 1
+                min_max_stats.update(node.reward + self.config.game * node.value())
+                value = node.reward + self.config.discount * value
 
-            value = node.reward + self.config.gamma * value
+        elif self.config.players == 2:
+            for node in reversed(search_path):
+                node.value_sum += value if node.to_play == to_play else -value
+                node.visit_count += 1
+                min_max_stats.update(node.reward + self.config.gamma * -node.value())
+                value = (-node.reward if node.to_play == to_play else node.reward) + self.config.gamma * value
 
 
     def select_action(self, root: Node, training_step: int) -> ActType:
@@ -146,11 +156,12 @@ class MCTS:
 
     def action_probabilities(self, root: Node) -> List[float]:
         total_visits = float(sum([child.visit_count for child in root.children.values()]))
-        action_probabilities = [
+        action_probs = [
             root.children[self.idx_to_action(idx)].visit_count / total_visits \
             if self.idx_to_action(idx) in root.children else 0 \
             for idx in range(len(self.config.action_space))
         ]
+        return action_probs
 
 
     def search(self,
@@ -172,8 +183,8 @@ class MCTS:
         # s_t^0 = h(o_1,...,o_t)
         # p_t^0, v_t^0 = f(s_t^0)
         root = Node(0)
-        policy, hidden_state, value = network.initial_inference(torch.as_tensor(observation))
-        root.expand(reward, policy, hidden_state, to_play, legal_actions)
+        policy_logits, hidden_state, value = network.initial_inference(torch.as_tensor(observation))
+        root.expand(reward, policy_logits, hidden_state, to_play, legal_actions)
         self.add_exploration_noise(root)
 
         min_max_stats = MinMaxStats()
@@ -192,13 +203,14 @@ class MCTS:
             r^l, s^l = g(s^{l-1}, a^l)
             '''
             parent = search_path[-2]
-            policy, hidden_state, value, reward = network.recurrent_inference(
+            policy_logits, hidden_state, value, reward = network.recurrent_inference(
                 parent.hidden_state,
                 torch.as_tensor(action_encoder(history[-1])).unsqueeze(0).unsqueeze(0)
             )
     
-            to_play = len(history) % self.config.players
-            node.expand(reward, policy, hidden_state, to_play, self.config.action_space)
+            if self.config.players == 2:
+                to_play = -1 if len(history) % self.config.players == 1 else 1
+            node.expand(reward, policy_logits, hidden_state, to_play, self.config.action_space)
 
             self.backpropagate(search_path, value, to_play, min_max_stats)
         return root

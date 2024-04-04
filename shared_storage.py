@@ -17,27 +17,19 @@ class SharedStorage:
         return deepcopy(self.checkpoint)
 
 
-    def set_checkpoint(self, model_path: str=None) -> None:
+    def save_checkpoint(self, model_path: str=None) -> None:
         torch.save(self.checkpoint, model_path)
 
 
-    def get_info(self, keys: List[str] | str) -> Dict[str, Any] | Any:
+    def get_info(self, keys: 'List[str] | str') -> 'Dict[str, Any] | Any':
         try:
             if isinstance(keys, list):
                 return {k: self.checkpoint[k] for k in keys}
-            else isinstance(keys, str):
-                return self.checkpoint[key]
+            elif isinstance(keys, str):
+                return self.checkpoint[keys]
         except TypeError as err:
             print(err)
 
 
-    def set_info(self,
-                keys: List[str] | str,
-                values: List[str] | str) -> None:
-        try:
-            if isinstance(keys, list) and isinstance(values, list):
-                self.checkpoint.update({k: v} for k, v in zip(keys, values))
-            else:
-                self.checkpoint[keys] = values
-        except TypeError as err:
-            print(err)
+    def set_info(self, data_dict: Dict[str, Any]) -> None:
+        self.checkpoint.update(data_dict)

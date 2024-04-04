@@ -16,8 +16,12 @@ class Game(ABC):
 
     def __init__(self,
                 players: int,
+                observation_dim: List[int],
+                action_space: List[ActType],
                 seed: int=None) -> None:
         self.players = players
+        self.observation_dim = observation_dim
+        self.action_space = action_space
 
 
     @abstractmethod
@@ -55,14 +59,16 @@ class GameHistory:
     the observation, we encode historical actions into the stacked observation.
     """
 
-    def __init__(self, game_type: str='board_game') -> None:
+    def __init__(self, game: Game) -> None:
         self.observations = []          # o_t: State observations
         self.actions = []               # a_{t+1}: Action leading to transition s_t -> s_{t+1}
+        self.encoded_actions = []
         self.rewards = []               # u_{t+1}: Observed reward after performing a_{t+1}
         self.to_plays = []              # p_t: Current player
         self.action_probabilities = []  # pi_t: Action probabilities produced by MCTS
         self.root_values = []           # v_t: MCTS value estimation
-        self.game_type = game_type
+        self.action_encoder = game.action_encoder
+        self.initial_observation = game.observation()
 
 
     def __len__(self) -> int:
@@ -78,6 +84,7 @@ class GameHistory:
             root_value: float) -> None:
         self.observations.append(observation)
         self.actions.append(action)
+        self.encoded_actions.append(self.action_encoder(action))
         self.rewards.append(reward)
         self.to_plays.append(to_play)
         self.action_probabilities.append(pi)
@@ -85,33 +92,44 @@ class GameHistory:
 
 
     def stack_observations(self,
-                        t: int,
-                        n_stacked_observations: int,
-                        action_space_size: int) -> np.ndarray:
+                            t: int,
+                            stacked_observations: int,
+                            action_space_size: int,
+                            stack_action: bool) -> np.ndarray:
         """
-        Stack 'n_stacked_observations' most recent observations (and corresponding 
-        actions lead to the states with atari) upto 't':
-            o_{t - n_stacked_observations + 1}, ..., o_t
+        Stack 'stacked_observations' most recent observations (and corresponding 
+        actions lead to the states with Atari) upto 't':
+            o_{t - stacked_observations + 1}, ..., o_t
 
         :param t: time step of the latest observation to stack
-        :param n_stacked_observations: number of observations to stack
+        :param stacked_observations: number of observations to stack
         :param action_space_size: size of the action space
+        :param stack_action: whether to stack historical actions
         """
-        # Convert to positive index
-        t = t % len(self)
-        n_stacked_observations_ = min(n_stacked_observations, t + 1)
         planes = []
+        if len(self) == 0:
+            planes.append(self.initial_observation)
+            if stack_action:
+                planes.append(np.zeros_like(self.initial_observation))
+            for _ in range(stacked_observations - 1):
+                planes.append(np.zeros_like(self.initial_observation))
+                if stack_action:
+                    planes.append(np.zeros_like(self.initial_observation))
+        else:
+            # Convert to positive index
+            t = t % len(self)
+            stacked_observations_ = min(stacked_observations, t + 1)
 
-        for step in reversed(range(t - n_stacked_observations_ + 1, t + 1)):
-            planes.append(self.observations[step])
-            if self.game_type == 'atari':
-                planes.append(np.full_like(self.observations[step], self.actions[step] / action_space_size))
+            for step in reversed(range(t - stacked_observations_ + 1, t + 1)):
+                planes.append(self.observations[step])
+                if stack_action:
+                    planes.append(np.full_like(self.observations[step], self.actions[step] / action_space_size))
 
-        # If n_stack_observations > t + 1, we attach planes of zeros instead
-        for _ in range(n_stacked_observations - n_stacked_observations_):
-            planes.append(np.zeros_like(self.observations[step]))
-            if self.game_type == 'atari':
+            # If n_stack_observations > t + 1, we attach planes of zeros instead
+            for _ in range(stacked_observations - stacked_observations_):
                 planes.append(np.zeros_like(self.observations[step]))
+                if stack_action:
+                    planes.append(np.zeros_like(self.observations[step]))
 
         return np.concatenate(planes, axis=0)
 
@@ -120,8 +138,7 @@ class GameHistory:
                     t: int,
                     td_steps: int,
                     gamma: float,
-                    unroll_steps: int,
-                    action_space: List[int]) -> Tuple[List[float], List[float], List[List[float]]]:
+                    unroll_steps: int) -> Tuple[List[float], List[float], List[List[float]]]:
         """
         Create targets for every unroll steps
 
@@ -129,7 +146,6 @@ class GameHistory:
         :param td_steps: n-step TD
         :param gamma: discount factor
         :param unroll_steps: number of unroll steps
-        :param action_space: action space
         :return: value targets, reward targets, policy targets
         """
         value_targets, reward_targets, policy_targets = [], [], []
@@ -182,7 +198,9 @@ class GameHistory:
 class TicTacToe(Game):
 
     def __init__(self, size: int=3) -> None:
-        super().__init__(players=2)
+        super().__init__(players=2,
+                        observation_dim=[3, 3, 3],
+                        action_space=list(range(size ** 2)))
         self.size = size
         # -1, 1, 0 denote X, O, empty respectively
         self.board = np.zeros((size, size))
