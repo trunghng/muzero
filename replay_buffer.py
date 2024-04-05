@@ -37,12 +37,11 @@ class ReplayBuffer:
 
     def sample(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        :return:
-            observation batch:   (B x (n_stacked_observations * n_channels) x h x w)
-            encoded action batch:(B x (unroll_steps + 1))
-            value target batch:  (B x (unroll_steps + 1))
-            reward target batch: (B x (unroll_steps + 1))
-            policy target batch: (B x (unroll_steps + 1) x action_space_size)
+        :return observation_batch:  (B x (n_stacked_observations * n_channels) x h x w)
+        :return action_batch:       (B x (unroll_steps + 1))
+        :return value_target_batch: (B x (unroll_steps + 1))
+        :return reward_target_batch:(B x (unroll_steps + 1))
+        :return policy_target_batch:(B x (unroll_steps + 1) x action_space_size)
         """
         game_histories = random.sample(self.memory, k=self.config.batch_size)
         batch = [[], [], [], [], []]

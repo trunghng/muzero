@@ -140,7 +140,7 @@ class RepresentationNetwork(nn.Module):
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         """
-        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (stacked_obs x h x w)
+        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
         :return hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         """
         if self.downsample:
@@ -221,7 +221,7 @@ class PredictionNetwork(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return policy_logits: (B x A)
+        :return policy_logits: (B x action_space_size)
         :return value: (B x support_size)
         """
         out = self.res_tower(hidden_state)
@@ -274,7 +274,7 @@ class MuZeroNetwork(nn.Module):
 
     def representation(self, observation: torch.Tensor) -> torch.Tensor:
         """
-        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (stacked_obs x h x w)
+        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
         :return hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         """
         hidden_state = self.repretation_network(observation)
@@ -298,7 +298,7 @@ class MuZeroNetwork(nn.Module):
     def prediction(self, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return policy_logits: (B x A)
+        :return policy_logits: (B x action_space_size)
         :return value: (B x support_size)
         """
         policy_logits, value = self.prediction_network(hidden_state)
@@ -309,8 +309,8 @@ class MuZeroNetwork(nn.Module):
         """
         Representation + Prediction function
 
-        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (stacked_obs x h x w)
-        :return policy_logits: (B x A)
+        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
+        :return policy_logits: (B x action_space_size)
         :return hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         :return value: (1)
         """
@@ -328,7 +328,7 @@ class MuZeroNetwork(nn.Module):
 
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         :param encoded_action: (B x 1 x h/16 x w/16) | (B x 1 x h x w)
-        :return policy_logits: (B x A)
+        :return policy_logits: (B x action_space_size)
         :return next_hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h x w)
         :return value: (1)
         :return reward: (1)
