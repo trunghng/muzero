@@ -4,16 +4,6 @@ from typing import Tuple, Dict
 import numpy as np
 
 
-class VisitSoftmaxTemperatureFn:
-
-    def tictactoe(self, n_training_steps: int, training_step: int) -> float:
-        """
-        :param n_training_steps: number of training steps
-        :param training_step: current training step
-        """
-        return 1.0
-
-
 def cell_to_idx(cell: Tuple[int, int], board_size: int) -> int:
     return cell[0] * board_size + cell[1]
 
@@ -36,7 +26,7 @@ def draw_board(board: np.ndarray, pieces: Dict[int, str]) -> None:
     
     :param board: board state
     :param pieces: dictionary of symbols, empty cell included,
-            E.g., Tictactoe: {-1: 'X', 1: 'O', 0: ' '}
+        E.g., Tictactoe: {-1: 'X', 1: 'O', 0: ' '}
     """
     row_indices = string.ascii_lowercase
     col_indices = range(1, len(row_indices) + 1)

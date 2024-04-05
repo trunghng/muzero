@@ -48,7 +48,7 @@ def support_to_scalar(probabilities: torch.Tensor,
     :param kwargs: Keyword arguments for inv_scalar_transformer
     """
     support = torch.arange(-support_limit, support_limit + 1)
-    x = np.dot(probabilities, support)
+    x = np.dot(probabilities.detach(), support)
     x = inv_scalar_transformer(torch.as_tensor(x), **kwargs)
     return x
 
@@ -85,8 +85,8 @@ def normalize_hidden_state(hidden_states: torch.Tensor) -> torch.Tensor:
     # Scale hidden state into [0, 1], performed strictly over one example, not batch
     hidden_states_ = hidden_states.view(-1, hidden_states.shape[1], hidden_states.shape[2] * hidden_states.shape[3])
     # Also insert one dim to make broadcasting valid
-    hidden_states_max = torch.max(hidden_state_, dim=2, keep_dim=True)[0].unsqueeze(-1)
-    hidden_states_min = torch.min(hidden_state_, dim=2, keep_dim=True)[0].unsqueeze(-1)
+    hidden_states_max = torch.max(hidden_states_, dim=2)[0].unsqueeze(-1).unsqueeze(-1)
+    hidden_states_min = torch.min(hidden_states_, dim=2)[0].unsqueeze(-1).unsqueeze(-1)
     hidden_states_scaled = (hidden_states - hidden_states_min) / (hidden_states_max - hidden_states_min + 1e-5)
     return hidden_states_scaled
 

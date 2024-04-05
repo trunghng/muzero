@@ -61,7 +61,6 @@ class SelfPlay:
                 action = self.mcts.select_action(root, None)
                 action_probs = self.mcts.action_probabilities(root)
                 next_observation, reward, terminated = self.game.step(action)
-                self.game.render()
                 game_history.save(observation, action, reward, self.game.to_play, action_probs, root.value())
                 observation = next_observation
 

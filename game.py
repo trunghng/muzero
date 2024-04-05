@@ -49,6 +49,13 @@ class Game(ABC):
         """"""
 
     @abstractmethod
+    def visit_softmax_temperature_func(self, training_steps: int, training_step: int) -> float:
+        """
+        :param training_steps: number of training steps
+        :param training_step: current training step
+        """
+
+    @abstractmethod
     def render(self) -> None:
         """"""
 
@@ -273,6 +280,14 @@ class TicTacToe(Game):
         one_hot_action = np.zeros((self.size, self.size))
         one_hot_action[idx_to_cell(action, self.size)] = 1
         return one_hot_action
+
+
+    def visit_softmax_temperature_func(self, training_steps: int, training_step: int) -> float:
+        """
+        :param training_steps: number of training steps
+        :param training_step: current training step
+        """
+        return 1.0
     
 
     def render(self) -> None:

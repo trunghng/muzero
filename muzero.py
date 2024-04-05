@@ -49,6 +49,7 @@ class MuZero:
         self.training_worker = Trainer.remote(self.checkpoint, self.config)
         self.replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.config)
         self.shared_storage_worker = SharedStorage.remote(self.checkpoint)
+        self.shared_storage_worker.set_info.remote({'terminated': False})
 
         for self_play_worker in self.self_play_workers:
             self_play_worker.play_continuously.remote(self.shared_storage_worker, self.replay_buffer_worker)

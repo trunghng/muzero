@@ -29,8 +29,10 @@ class ReplayBuffer:
         self.played_games += 1
         self.played_steps += len(game_history)
 
-        shared_storage.set_info.remote('played_games', self.played_games)
-        shared_storage.set_info.remote('played_steps', self.played_steps)
+        shared_storage.set_info.remote({
+            'played_games': self.played_games,
+            'played_steps': self.played_steps
+        })
 
 
     def sample(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:

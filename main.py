@@ -47,7 +47,7 @@ if __name__ == '__main__':
                                 help='')
     selfplay_args.add_argument('--stack-action', action='store_true',
                                 help='Whether to attach historical actions when stacking observations')
-    selfplay_args.add_argument('--simulations', type=int,
+    selfplay_args.add_argument('--simulations', type=int, default=25,
                                 help='Number of MCTS simulations')
     selfplay_args.add_argument('--gamma', type=float, default=1,
                                 help='Discount factor')
@@ -100,8 +100,6 @@ if __name__ == '__main__':
     network_args.add_argument('--save-model', action='store_true',
                                 help='Whether to save the model')
 
-
-
     for p in [play_parser, train_parser]:
         p.add_argument('--game', type=str, default='tictactoe', help='Game name')
         p.add_argument('--boardsize', type=int, default=3, help='Board size (if relevant)')
@@ -112,6 +110,7 @@ if __name__ == '__main__':
     args.players = game.players
     args.observation_dim = game.observation_dim
     args.action_space = game.action_space
+    args.visit_softmax_temperature_func = game.visit_softmax_temperature_func
 
     if args.mode == 'play':
         if game.players == 2:

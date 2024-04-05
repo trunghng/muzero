@@ -80,7 +80,7 @@ class MCTS:
             P(s,a) = (1 - exploration_frac) * P(s,a) + exploration_frac * noise
         """
         actions = node.children.keys()
-        noises = np.random.dirichlet(self.config.root_dirichlet_alpha, len(actions))
+        noises = np.random.dirichlet([self.config.root_dirichlet_alpha] * len(actions))
         for a, n in zip(actions, noises):
             node.children[a].prior = (1 - self.config.root_exploration_fraction) * node.children[a].prior\
                                         + self.config.root_exploration_fraction * n
@@ -105,10 +105,11 @@ class MCTS:
         return q + u
 
 
-    def select_child(self, node: Node) -> Tuple[ActType, Node]:
+    def select_child(self, node: Node, min_max_stats: MinMaxStats) -> Tuple[ActType, Node]:
         """Select the child node with highest UCB"""
-        ucb_scores = {action: self.ucb_score(node, child) for action, child in node.children.items()}
-        action, child = max(ucb_scores.items(), key=lambda k: k[1])
+        ucb_scores = {(action, child): self.ucb_score(node, child, min_max_stats) for action, child in node.children.items()}
+        max_ucb = max(ucb_scores.values())
+        (action, child) = random.choice([k for k, v in ucb_scores.items() if v == max_ucb])
         return action, child
 
 
@@ -142,7 +143,7 @@ class MCTS:
         :param training_step: current training step
         """
         visit_counts = {action: child.visit_count for action, child in root.children.items()}
-        t = self.config.visit_softmax_temperature_fn(self.config.training_steps, training_step)
+        t = self.config.visit_softmax_temperature_func(self.config.training_steps, training_step)
 
         if t == 0:
             max_visits = max(visit_counts.values())
@@ -156,11 +157,8 @@ class MCTS:
 
     def action_probabilities(self, root: Node) -> List[float]:
         total_visits = float(sum([child.visit_count for child in root.children.values()]))
-        action_probs = [
-            root.children[self.idx_to_action(idx)].visit_count / total_visits \
-            if self.idx_to_action(idx) in root.children else 0 \
-            for idx in range(len(self.config.action_space))
-        ]
+        action_probs = [root.children[action].visit_count / total_visits \
+            if action in root.children else 0 for action in range(len(self.config.action_space))]
         return action_probs
 
 
@@ -183,8 +181,14 @@ class MCTS:
         # s_t^0 = h(o_1,...,o_t)
         # p_t^0, v_t^0 = f(s_t^0)
         root = Node(0)
-        policy_logits, hidden_state, value = network.initial_inference(torch.as_tensor(observation))
-        root.expand(reward, policy_logits, hidden_state, to_play, legal_actions)
+
+        # policy_logits: (B x A)
+        # hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h/16 x w/16)
+        # value:         (1)
+        policy_logits, hidden_state,value = network.initial_inference(\
+                torch.as_tensor(observation, dtype=torch.float32).unsqueeze(0))
+
+        root.expand(0, hidden_state, policy_logits, to_play, legal_actions)
         self.add_exploration_noise(root)
 
         min_max_stats = MinMaxStats()
@@ -195,22 +199,20 @@ class MCTS:
             history = deepcopy(action_history)
 
             while node.expanded():
-                action, node = self.select_child(node)
+                action, node = self.select_child(node, min_max_stats)
                 search_path.append(node)
                 history.append(action)
             
-            '''
-            r^l, s^l = g(s^{l-1}, a^l)
-            '''
+            # r^l, s^l = g(s^{l-1}, a^l)
             parent = search_path[-2]
             policy_logits, hidden_state, value, reward = network.recurrent_inference(
                 parent.hidden_state,
-                torch.as_tensor(action_encoder(history[-1])).unsqueeze(0).unsqueeze(0)
+                torch.as_tensor(action_encoder(history[-1]), dtype=torch.float32).unsqueeze(0).unsqueeze(0)
             )
     
             if self.config.players == 2:
                 to_play = -1 if len(history) % self.config.players == 1 else 1
-            node.expand(reward, policy_logits, hidden_state, to_play, self.config.action_space)
+            node.expand(reward, hidden_state, policy_logits, to_play, self.config.action_space)
 
             self.backpropagate(search_path, value, to_play, min_max_stats)
         return root

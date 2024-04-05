@@ -7,7 +7,6 @@ import torch
 
 @ray.remote
 class SharedStorage:
-    
 
     def __init__(self, checkpoint: Dict[str, Any]) -> None:
         self.checkpoint = checkpoint
