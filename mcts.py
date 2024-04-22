@@ -133,19 +133,18 @@ class MCTS:
                 value = (-node.reward if node.to_play == to_play else node.reward) + self.config.gamma * value
 
 
-    def select_action(self, root: Node, training_step: int) -> ActType:
+    def select_action(self, root: Node, temperature: float) -> ActType:
         """
         Select action according to
             pi(a|s_0) = N(s_0,a)^(1/tau) / sum_b(N(s_0,b)^(1/t))
-        If t = 0, pi is deterministic, returns the action with max #visits
+        If t = 0, pi is deterministic, returns the action with max #visits (best action)
 
         :param root: root node
-        :param training_step: current training step
+        :param temperature:
         """
         visit_counts = {action: child.visit_count for action, child in root.children.items()}
-        t = self.config.visit_softmax_temperature_func(self.config.training_steps, training_step)
 
-        if t == 0:
+        if temperature == 0:
             max_visits = max(visit_counts.values())
             action = random.choice([a for a, v in visit_counts.items() if v == max_visits])
         else:

@@ -1,7 +1,9 @@
 from typing import Dict, Any, Tuple
+import time
 
 import ray
 import torch
+import torch.nn as nn
 from torch.optim import Adam
 
 from network import MuZeroNetwork
@@ -28,7 +30,7 @@ class Trainer:
                                     config.fc_value_layers,
                                     config.downsample,
                                     config.support_limit,
-                                    len(config.action_space))
+                                    len(config.action_space)).to(self.config.device)
         self.network.set_weights(initial_checkpoint['model_state_dict'])
         self.network.train()
         self.optimizer = Adam(self.network.parameters(), lr=self.config.lr,\
@@ -41,10 +43,12 @@ class Trainer:
     def update_weights_continuously(self,
                                     shared_storage: SharedStorage,
                                     replay_buffer: ReplayBuffer) -> None:
+        while ray.get(shared_storage.get_info.remote('played_games')) < 1:
+            time.sleep(0.1)
+
         while self.training_step < self.config.training_steps\
-                and not ray.get(shared_storage.get_info.remote('terminated'))\
-                and ray.get(replay_buffer.len.remote()) >= self.config.batch_size:
-            batch = replay_buffer.sample.remote()
+                and not ray.get(shared_storage.get_info.remote('terminated')):
+            batch = ray.get(replay_buffer.sample.remote())
             loss, value_loss, reward_loss, policy_loss = self.update_weights(batch)
             if self.training_step % self.config.checkpoint_interval == 0:
                 shared_storage.set_info.remote({
@@ -67,33 +71,40 @@ class Trainer:
 
     def update_weights(self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor])\
                     -> Tuple[float, float, float, float]:
-        observation_batch, action_batch, value_target_batch, reward_target_batch, policy_target_batch = batch
+        observation_batch, action_batch, value_target_batch, reward_target_batch, policy_target_batch\
+                            = map(lambda x: x.to(self.config.device), batch)
         value_target_batch = scalar_to_support(value_target_batch, self.config.support_limit)
         reward_target_batch = scalar_to_support(reward_target_batch, self.config.support_limit)
 
-        policies_logits, hidden_state, value = self.network.initial_inference(observation_batch)
-        predictions = [(1.0, value, 0, policy_logits)]
+        policy_logits, hidden_state, value = self.network.initial_inference(observation_batch)
+        predictions = [(1.0, value, torch.zeros_like(value), policy_logits)]
 
         for k in range(1, action_batch.shape[1]):
             policy_logits, hidden_state, value, reward = self.network.recurrent_inference(
-                observation_batch, action_batch[:, k]
+                hidden_state, action_batch[:, k].unsqueeze(1)
             )
 
             # Scale the gradient at the start of dynamics function by 0.5
             scale_gradient(hidden_state, 0.5)
             predictions.append((1.0 / action_batch.shape[1], value, reward, policy_logits))
 
+        for pred in predictions:
+            pred[1].requires_grad = True
+            pred[2].requires_grad = True
+
         value_loss, reward_loss, policy_loss = 0, 0, 0
         for k in range(len(predictions)):
             loss_scale, value, reward, policy_logits = predictions[k]
-            value_loss_k, reward_loss_k, policy_loss_k = map(
-                scale_gradient, loss(value, reward, policy_logits, value_target_batch[:, k], 
-                reward_target_batch[:, k], policy_target_batch[:, k]), [loss_scale] * 3
-            )
+
+            value_loss_k, reward_loss_k, policy_loss_k = self.loss(value, reward, policy_logits, 
+                                value_target_batch[:, k], reward_target_batch[:, k], policy_target_batch[:, k])
+            scale_gradient(value_loss_k, loss_scale)
+            scale_gradient(reward_loss_k, loss_scale)
+            scale_gradient(policy_loss_k, loss_scale)
 
             # Ignore reward loss for the first batch step
             if k == 0:
-                reward_loss_k = torch.zeros_like(reward_loss)
+                reward_loss_k = torch.zeros_like(value_loss_k)
             value_loss += value_loss_k
             reward_loss += reward_loss_k
             policy_loss += policy_loss_k
@@ -114,7 +125,8 @@ class Trainer:
             value_target: torch.Tensor,
             reward_target: torch.Tensor,
             policy_target: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        value_loss = nn.CrossEntropyLoss(value, value_target)
-        reward_loss = nn.CrossEntropyLoss(reward, reward_target)
-        policy_loss = nn.CrossEntropyLoss(policy_logits, policy_target)
+        f = nn.CrossEntropyLoss()
+        value_loss = f(value, value_target)
+        reward_loss = f(reward, reward_target)
+        policy_loss = f(policy_logits, policy_target)
         return value_loss, reward_loss, policy_loss

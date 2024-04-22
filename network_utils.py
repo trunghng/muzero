@@ -48,8 +48,8 @@ def support_to_scalar(probabilities: torch.Tensor,
     :param kwargs: Keyword arguments for inv_scalar_transformer
     """
     support = torch.arange(-support_limit, support_limit + 1)
-    x = np.dot(probabilities.detach(), support)
-    x = inv_scalar_transformer(torch.as_tensor(x), **kwargs)
+    x = np.dot(probabilities.detach().cpu(), support)
+    x = inv_scalar_transformer(torch.as_tensor(x, device=probabilities.device), **kwargs)
     return x
 
 
@@ -69,7 +69,7 @@ def scalar_to_support(x: torch.Tensor,
     x = torch.clamp(x, min=-support_limit, max=support_limit)
     floor = x.floor().int()
     prob = x - floor
-    probabilities = torch.zeros((len(x), support_limit * 2 + 1))
+    probabilities = torch.zeros((len(x), support_limit * 2 + 1), device=x.device)
     probabilities[:, floor + support_limit] = 1 - prob
     probabilities[:, floor + support_limit + 1] = prob
     return probabilities
@@ -97,4 +97,12 @@ def scale_gradient(x: torch.Tensor, scale_factor: float) -> torch.Tensor:
 
 
 def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    return {k: v.cpu() for k, v in state_dict.items()}
+    cpu_dict = {}
+    for key, value in state_dict.items():
+        if isinstance(value, torch.Tensor):
+            cpu_dict[key] = value.cpu()
+        elif isinstance(value, dict):
+            cpu_dict[key] = dict_to_cpu(value)
+        else:
+            cpu_dict[key] = value
+    return cpu_dict

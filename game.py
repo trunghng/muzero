@@ -141,11 +141,25 @@ class GameHistory:
         return np.concatenate(planes, axis=0)
 
 
+    def compute_return(self, gamma: float) -> float:
+        """
+        Compute episode return, assuming that the game is over
+        G = r_1 + gamma * r_2 + ... + gamma^{T-1} * r_T
+
+        :param gamma: discount factor
+        """
+        eps_return = self.rewards[-1]
+        for r in reversed(self.rewards[0:-1]):
+            eps_return = eps_return * gamma + r
+        return eps_return
+
+
     def make_target(self,
                     t: int,
                     td_steps: int,
                     gamma: float,
-                    unroll_steps: int) -> Tuple[List[float], List[float], List[List[float]]]:
+                    unroll_steps: int,
+                    action_space_size: int) -> Tuple[List[float], List[float], List[List[float]]]:
         """
         Create targets for every unroll steps
 
@@ -153,6 +167,7 @@ class GameHistory:
         :param td_steps: n-step TD
         :param gamma: discount factor
         :param unroll_steps: number of unroll steps
+        :param action_space_size: size of the action space
         :return: value targets, reward targets, policy targets
         """
         value_targets, reward_targets, policy_targets = [], [], []
@@ -166,7 +181,7 @@ class GameHistory:
 
             z_t = u_{t+1} + gamma * u_{t+2} + ... + gamma^{n-1} * u_{t+n} + gamma^n * v_{t+n} 
             """
-            if self.game_type == 'board_game':
+            if gamma == 1:
                 rewards = []
                 for i in range(step, len(self)):
                     rewards.append(self.rewards[i] if self.to_plays[i] == self.to_plays[step] else -self.rewards[i])
@@ -196,8 +211,8 @@ class GameHistory:
                 policy_targets.append(self.action_probabilities[step])
             else:
                 value_targets.append(0)
-                reward_targets.append(None)
-                policy_targets.append([])
+                reward_targets.append(0)
+                policy_targets.append([1 / action_space_size] * action_space_size)
 
         return value_targets, reward_targets, policy_targets
 

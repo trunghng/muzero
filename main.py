@@ -1,5 +1,7 @@
 import argparse
 
+import torch
+
 from game import Game, TicTacToe
 from arena import Arena
 from player import Player, RandomPlayer, HumanPlayer, MuZeroPlayer
@@ -36,6 +38,10 @@ if __name__ == '__main__':
 
     train_parser = mode_parsers.add_parser('train')
     train_parser.set_defaults(mode='train')
+    train_parser.add_argument('--exp-name', type=str, default='tictactoe',
+                                help='Experiment name')
+    train_parser.add_argument('--gpu', action='store_true',
+                                help='Whether to enable GPU (if available)')
     selfplay_args = train_parser.add_argument_group('Self-play arguments')
     selfplay_args.add_argument('--seed', type=int, default=0,
                                 help='Seed')
@@ -79,13 +85,15 @@ if __name__ == '__main__':
                                 help='Hidden layers in value head')
     network_args.add_argument('--downsample', action='store_true',
                                 help='Whether to downsample observations before representation network')
-    network_args.add_argument('--batch-size', type=int, default=64,
+    network_args.add_argument('--batch-size', type=int, default=256,
                                 help='Mini-batch size')
+    network_args.add_argument('--checkpoint-interval', type=int, default=10,
+                                help='Checkpoint interval')
     network_args.add_argument('--buffer-size', type=int, default=3000,
                                 help='Replay buffer size')
-    network_args.add_argument('--td-steps', type=int, default=20,
+    network_args.add_argument('--td-steps', type=int, default=9,
                                 help='Number of steps in the future to take into account for calculating the target value')
-    network_args.add_argument('--unroll-steps', type=int,
+    network_args.add_argument('--unroll-steps', type=int, default=5,
                                 help='Number of unroll steps')
     network_args.add_argument('--training-steps', type=int, default=1000000,
                                 help='Number of training steps')
@@ -119,6 +127,7 @@ if __name__ == '__main__':
             arena = Arena(p1, p2, game)
             arena.run(True)
     elif args.mode == 'train':
+        args.device = 'cuda:0' if torch.cuda.is_available() and args.gpu else 'cpu'
         muzero = MuZero(game, args)
         muzero.train()
         
