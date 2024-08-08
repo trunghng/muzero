@@ -10,7 +10,7 @@ def mlp(sizes: List[int],
         output_activation: nn.Module=nn.Identity):
     """
     Create an MLP
-    
+
     :param sizes: List of layers' size
     :param activation: Activation layer type
     :param output_activation: Output layer type
@@ -31,14 +31,14 @@ def atari_scalar_transform(x: torch.Tensor, var_eps: float=0.001) -> torch.Tenso
 
 
 def inv_atari_scalar_transform(x: torch.Tensor, var_eps: float=0.001) -> torch.Tensor:
-    return torch.sign(x) * (((torch.sqrt(1 + 4 * var_eps * (torch.abs(x) \
+    return torch.sign(x) * (((torch.sqrt(1 + 4 * var_eps * (torch.abs(x)
                 + 1 + var_eps)) - 1) / (2 * var_eps)) ** 2 - 1)
 
 
 def support_to_scalar(probabilities: torch.Tensor,
-                    support_limit: int,
-                    inv_scalar_transformer: Callable=inv_atari_scalar_transform,
-                    **kwargs) -> torch.Tensor:
+                      support_limit: int,
+                      inv_scalar_transformer: Callable=inv_atari_scalar_transform,
+                      **kwargs) -> torch.Tensor:
     """
     Re-convert categorical representation of scalars with integer support [-support_limit, support_limit] back to scalars
 
@@ -54,9 +54,9 @@ def support_to_scalar(probabilities: torch.Tensor,
 
 
 def scalar_to_support(x: torch.Tensor,
-                    support_limit: int,
-                    scalar_transformer: Callable=atari_scalar_transform,
-                    **kwargs) -> torch.Tensor:
+                      support_limit: int,
+                      scalar_transformer: Callable=atari_scalar_transform,
+                      **kwargs) -> torch.Tensor:
     """
     Convert scalars to categorical representations with integer support [-support_limit, support_limit]
 
@@ -69,9 +69,9 @@ def scalar_to_support(x: torch.Tensor,
     x = torch.clamp(x, min=-support_limit, max=support_limit)
     floor = x.floor().int()
     prob = x - floor
-    probabilities = torch.zeros((len(x), support_limit * 2 + 1), device=x.device)
-    probabilities[:, floor + support_limit] = 1 - prob
-    probabilities[:, floor + support_limit + 1] = prob
+    probabilities = torch.zeros((x.shape[0], x.shape[1], support_limit * 2 + 1), device=x.device)
+    probabilities[:, :, floor + support_limit] = 1 - prob
+    probabilities[:, :, floor + support_limit + 1] = prob
     return probabilities
 
 

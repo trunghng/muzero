@@ -11,16 +11,15 @@ class ConvBlock(nn.Module):
     """Convolutional block"""
 
     def __init__(self,
-                in_channels: int,
-                out_channels: int,
-                stride: int=1) -> None:
+                 in_channels: int,
+                 out_channels: int,
+                 stride: int=1) -> None:
         super().__init__()
         self.network = nn.Sequential(
             conv3x3(in_channels, out_channels, stride=stride),
             nn.BatchNorm2d(out_channels),
             nn.ReLU()
         )
-
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.network(x)
@@ -30,15 +29,14 @@ class ResidualBlock(nn.Module):
     """Residual block"""
 
     def __init__(self,
-                channels: int,
-                stride: int=1) -> None:
+                 channels: int,
+                 stride: int=1) -> None:
         super().__init__()
         self.conv1 = conv3x3(channels, channels, stride)
         self.bn1 = nn.BatchNorm2d(channels)
         self.conv2 = conv3x3(channels, channels)
         self.bn2 = nn.BatchNorm2d(channels)
         self.relu = nn.ReLU(inplace=True)
-
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
@@ -55,8 +53,8 @@ class DownSample(nn.Module):
     """Network to reduce the spatial resolution of observations before representation network"""
 
     def __init__(self,
-                in_channels: int,
-                out_channels: int) -> None:
+                 in_channels: int,
+                 out_channels: int) -> None:
         # (C_in x h x w) -> (C_out/2 x h/2 x w/2)
         self.conv1 = conv3x3(in_channels, out_channels / 2, stride=2)
 
@@ -84,7 +82,6 @@ class DownSample(nn.Module):
         # (C_out x h/8 x w/8) -> (C_out x h/16 x w/16)
         self.pooling2 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.res_block1(out)
@@ -104,7 +101,7 @@ class RepresentationNetwork(nn.Module):
         - input: (stacked_observations * n_colors + stacked_observations) x h x w
         - output: channels x downsampled_h x downsampled_w
     Otherwise, observation has shape (h * w) and input has shape (stacked_observations x h x w)
-    
+
     :param observation_dim: Observation dimensionality
     :param stacked_observations: Number of observations stacked
     :param blocks: Number of residual blocks
@@ -113,11 +110,11 @@ class RepresentationNetwork(nn.Module):
     """
 
     def __init__(self,
-                observation_dim: List[int],
-                stacked_observations: int,
-                blocks: int,
-                channels: int,
-                downsample: bool) -> None:
+                 observation_dim: List[int],
+                 stacked_observations: int,
+                 blocks: int,
+                 channels: int,
+                 downsample: bool) -> None:
         super().__init__()
 
         self.downsample = downsample
@@ -137,7 +134,6 @@ class RepresentationNetwork(nn.Module):
             ResidualBlock(channels) for _ in range(blocks)
         ])
 
-
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         """
         :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
@@ -155,12 +151,12 @@ class DynamicsNetwork(nn.Module):
     """Dynamics network"""
 
     def __init__(self,
-                blocks: int,
-                channels: int,
-                reduced_channels_reward: int,
-                fc_reward_layers: List[int],
-                support_size: int,
-                block_output_size_reward: int) -> None:
+                 blocks: int,
+                 channels: int,
+                 reduced_channels_reward: int,
+                 fc_reward_layers: List[int],
+                 support_size: int,
+                 block_output_size_reward: int) -> None:
         super().__init__()
         self.conv_block = ConvBlock(channels, channels - 1)
         self.res_tower = nn.Sequential(*[
@@ -172,7 +168,6 @@ class DynamicsNetwork(nn.Module):
             nn.Flatten(start_dim=1),
             mlp([block_output_size_reward, *fc_reward_layers, support_size])
         )
-
 
     def forward(self, state_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -191,16 +186,16 @@ class PredictionNetwork(nn.Module):
     """Prediction network"""
 
     def __init__(self,
-                blocks: int,
-                channels: int,
-                reduced_channels_policy: int,
-                reduced_channels_value: int,
-                fc_policy_layers: int,
-                fc_value_layers: int,
-                support_size: int,
-                action_space_size: int,
-                block_output_size_policy: int,
-                block_output_size_value: int) -> None:
+                 blocks: int,
+                 channels: int,
+                 reduced_channels_policy: int,
+                 reduced_channels_value: int,
+                 fc_policy_layers: List[int],
+                 fc_value_layers: List[int],
+                 support_size: int,
+                 action_space_size: int,
+                 block_output_size_policy: int,
+                 block_output_size_value: int) -> None:
         super().__init__()
         self.res_tower = nn.Sequential(*[
             ResidualBlock(channels) for _ in range(blocks)
@@ -217,7 +212,6 @@ class PredictionNetwork(nn.Module):
             mlp([block_output_size_value, *fc_value_layers, support_size])
         )
 
-
     def forward(self, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
@@ -233,19 +227,19 @@ class PredictionNetwork(nn.Module):
 class MuZeroNetwork(nn.Module):
 
     def __init__(self,
-                observation_dim: List[int],
-                stacked_observations: int,
-                blocks: int,
-                channels: int,
-                reduced_channels_reward: int,
-                reduced_channels_policy: int,
-                reduced_channels_value: int,
-                fc_reward_layers: int,
-                fc_policy_layers: int,
-                fc_value_layers: int,
-                downsample: bool,
-                support_limit: int,
-                action_space_size: int) -> None:
+                 observation_dim: List[int],
+                 action_space_size: int,
+                 stacked_observations: int,
+                 blocks: int,
+                 channels: int,
+                 reduced_channels_reward: int,
+                 reduced_channels_policy: int,
+                 reduced_channels_value: int,
+                 fc_reward_layers: List[int],
+                 fc_policy_layers: List[int],
+                 fc_value_layers: List[int],
+                 downsample: bool,
+                 support_limit: int) -> None:
         super().__init__()
         self.support_limit = support_limit
         support_size = self.support_limit * 2 + 1
@@ -259,7 +253,7 @@ class MuZeroNetwork(nn.Module):
             block_output_size_reward = reduced_channels_reward * res
             block_output_size_policy = reduced_channels_policy * res
             block_output_size_value = reduced_channels_value * res
-        
+
         self.repretation_network = RepresentationNetwork(
             observation_dim, stacked_observations, blocks, channels, downsample
         )
@@ -271,7 +265,6 @@ class MuZeroNetwork(nn.Module):
             fc_value_layers, support_size, action_space_size, block_output_size_policy, block_output_size_value
         )
 
-
     def representation(self, observation: torch.Tensor) -> torch.Tensor:
         """
         :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
@@ -280,10 +273,9 @@ class MuZeroNetwork(nn.Module):
         hidden_state = self.repretation_network(observation)
         return normalize_hidden_state(hidden_state)
 
-
     def dynamics(self,
-                hidden_state: torch.Tensor,
-                encoded_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                 hidden_state: torch.Tensor,
+                 encoded_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         :param encoded_action: (B x 1 x h/16 x w/16) | (B x 1 x h x w)
@@ -294,7 +286,6 @@ class MuZeroNetwork(nn.Module):
         next_hidden_state, reward = self.dynamics_network(state_action)
         return normalize_hidden_state(next_hidden_state), reward
 
-
     def prediction(self, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
@@ -304,30 +295,34 @@ class MuZeroNetwork(nn.Module):
         policy_logits, value = self.prediction_network(hidden_state)
         return policy_logits, value
 
-
-    def initial_inference(self, observation: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def initial_inference(self,
+                          observation: torch.Tensor,
+                          inv_transform: bool=True) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Representation + Prediction function
 
         :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
+        :param inv_transform: whether to apply inverse transformation on categorical form of value
         :return policy_logits: (B x action_space_size)
         :return hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         :return value: (1)
         """
         hidden_state = self.representation(observation)
         policy_logits, value = self.prediction(hidden_state)
-        value = support_to_scalar(value, self.support_limit)
+        if inv_transform:
+            value = support_to_scalar(value, self.support_limit)
         return policy_logits, hidden_state, value
-
 
     def recurrent_inference(self,
                             hidden_state: torch.Tensor,
-                            encoded_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                            encoded_action: torch.Tensor,
+                            scalar_transform: bool=True) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Dynamics + Prediction function
 
         :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
         :param encoded_action: (B x 1 x h/16 x w/16) | (B x 1 x h x w)
+        :param scalar_transform: whether to apply transformation on value and reward
         :return policy_logits: (B x action_space_size)
         :return next_hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h x w)
         :return value: (1)
@@ -335,10 +330,10 @@ class MuZeroNetwork(nn.Module):
         """
         next_hidden_state, reward = self.dynamics(hidden_state, encoded_action)
         policy_logits, value = self.prediction(hidden_state)
-        reward = support_to_scalar(reward, self.support_limit)
-        value = support_to_scalar(value, self.support_limit)
+        if scalar_transform:
+            reward = support_to_scalar(reward, self.support_limit)
+            value = support_to_scalar(value, self.support_limit)
         return policy_logits, next_hidden_state, value, reward
-
 
     def set_weights(self, weights: Any) -> None:
         if weights is not None:

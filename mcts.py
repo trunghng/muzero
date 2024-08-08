@@ -13,31 +13,28 @@ from network import MuZeroNetwork
 class Node:
 
     def __init__(self, prior: float):
-        self.visit_count = 0 # N
+        self.visit_count = 0        # N
         self.value_sum = 0
-        self.prior = prior # P
-        self.reward = 0 # R
-        self.children = dict() # {action (ActType): child (Node)}
-        self.hidden_state = None # S
+        self.prior = prior          # P
+        self.reward = 0             # R
+        self.children = dict()      # {action (ActType): child (Node)}
+        self.hidden_state = None    # S
         self.to_play = -1
-
 
     def expanded(self) -> bool:
         return len(self.children) > 0
-
 
     def value(self) -> float: # Q
         if self.visit_count == 0:
             return 0
         return self.value_sum / self.visit_count
 
-
     def expand(self,
-            reward: float,
-            hidden_state: torch.Tensor,
-            policy_logits: torch.Tensor,
-            to_play: PlayerType,
-            actions: List[ActType]) -> None:
+               reward: float,
+               hidden_state: torch.Tensor,
+               policy_logits: torch.Tensor,
+               to_play: PlayerType,
+               actions: List[ActType]) -> None:
         self.to_play = to_play
         self.reward = reward
         self.hidden_state = hidden_state
@@ -56,11 +53,9 @@ class MinMaxStats:
         self.max = -float('inf')
         self.min = float('inf')
 
-
     def update(self, value: float) -> None:
         self.max = max(self.max, value)
         self.min = min(self.min, value)
-
 
     def normalize(self, value: float) -> float:
         if self.max > self.min:
@@ -73,7 +68,6 @@ class MCTS:
     def __init__(self, config) -> None:
         self.config = config
 
-
     def add_exploration_noise(self, node: Node) -> None:
         """
         Dirichlet noise injection into prior probabilities. For each a:
@@ -85,11 +79,10 @@ class MCTS:
             node.children[a].prior = (1 - self.config.root_exploration_fraction) * node.children[a].prior\
                                         + self.config.root_exploration_fraction * n
 
-
     def ucb_score(self,
-                parent: Node,
-                child: Node,
-                min_max_stats: MinMaxStats) -> float:
+                  parent: Node,
+                  child: Node,
+                  min_max_stats: MinMaxStats) -> float:
         """
         Compute UCB score according to a variant of PUCT
             ucb_score = Q(s,a) + U(s,a)
@@ -104,7 +97,6 @@ class MCTS:
         u = c * child.prior + math.sqrt(parent.visit_count / (1 + child.visit_count))
         return q + u
 
-
     def select_child(self, node: Node, min_max_stats: MinMaxStats) -> Tuple[ActType, Node]:
         """Select the child node with highest UCB"""
         ucb_scores = {(action, child): self.ucb_score(node, child, min_max_stats) for action, child in node.children.items()}
@@ -112,26 +104,23 @@ class MCTS:
         (action, child) = random.choice([k for k, v in ucb_scores.items() if v == max_ucb])
         return action, child
 
-
     def backpropagate(self,
-                    search_path: List[Node],
-                    value: float,
-                    to_play: PlayerType,
-                    min_max_stats: MinMaxStats) -> None:
+                      search_path: List[Node],
+                      value: float,
+                      to_play: PlayerType,
+                      min_max_stats: MinMaxStats) -> None:
         if self.config.players == 1:
             for node in reversed(search_path):
                 node.value_sum += value
                 node.visit_count += 1
-                min_max_stats.update(node.reward + self.config.game * node.value())
-                value = node.reward + self.config.discount * value
-
+                min_max_stats.update(node.reward + self.config.gamma * node.value())
+                value = node.reward + self.config.gamma * value
         elif self.config.players == 2:
             for node in reversed(search_path):
                 node.value_sum += value if node.to_play == to_play else -value
                 node.visit_count += 1
                 min_max_stats.update(node.reward + self.config.gamma * -node.value())
                 value = (-node.reward if node.to_play == to_play else node.reward) + self.config.gamma * value
-
 
     def select_action(self, root: Node, temperature: float) -> ActType:
         """
@@ -153,21 +142,21 @@ class MCTS:
             action = list(visit_counts.keys())[idx]
         return action
 
-
     def action_probabilities(self, root: Node) -> List[float]:
         total_visits = float(sum([child.visit_count for child in root.children.values()]))
-        action_probs = [root.children[action].visit_count / total_visits \
-            if action in root.children else 0 for action in range(len(self.config.action_space))]
+        action_probs = [
+            root.children[action].visit_count / total_visits
+            if action in root.children else 0 for action in range(self.config.action_space_size)
+        ]
         return action_probs
 
-
     def search(self,
-            network: MuZeroNetwork,
-            observation: np.ndarray,
-            legal_actions: List[ActType],
-            action_history: List[ActType],
-            action_encoder: Callable,
-            to_play: PlayerType) -> Node:
+               network: MuZeroNetwork,
+               observation: np.ndarray,
+               legal_actions: List[ActType],
+               action_history: List[ActType],
+               action_encoder: Callable,
+               to_play: PlayerType) -> Node:
         """
         Run a MCTS search
 
@@ -184,8 +173,9 @@ class MCTS:
         # policy_logits: (B x A)
         # hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h/16 x w/16)
         # value:         (1)
-        policy_logits, hidden_state,value = network.initial_inference(\
-                torch.as_tensor(observation, dtype=torch.float32).unsqueeze(0))
+        policy_logits, hidden_state, value = network.initial_inference(
+            torch.as_tensor(observation, dtype=torch.float32).unsqueeze(0)
+        )
 
         root.expand(0, hidden_state, policy_logits, to_play, legal_actions)
         self.add_exploration_noise(root)
@@ -201,18 +191,17 @@ class MCTS:
                 action, node = self.select_child(node, min_max_stats)
                 search_path.append(node)
                 history.append(action)
-            
+
             # r^l, s^l = g(s^{l-1}, a^l)
             parent = search_path[-2]
             policy_logits, hidden_state, value, reward = network.recurrent_inference(
                 parent.hidden_state,
                 torch.as_tensor(action_encoder(history[-1]), dtype=torch.float32).unsqueeze(0).unsqueeze(0)
             )
-    
+
             if self.config.players == 2:
                 to_play = -1 if len(history) % self.config.players == 1 else 1
-            node.expand(reward, hidden_state, policy_logits, to_play, self.config.action_space)
+            node.expand(reward, hidden_state, policy_logits, to_play, range(self.config.action_space_size))
 
             self.backpropagate(search_path, value, to_play, min_max_stats)
         return root
-    

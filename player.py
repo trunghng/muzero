@@ -25,12 +25,15 @@ class HumanPlayer(Player):
     """Human player"""
 
     def play(self, game: Game) -> ActType:
-        action_str = input(f'Enter your move: ')
-        return cellstr_to_idx(action_str, game.size)
-
-
-class MuZeroPlayer(Player):
-    """MuZero player"""
-
-    def play(self, game: Game) -> ActType:
-        pass
+        action = None
+        while action not in game.legal_actions():
+            actions = game.legal_actions()
+            if game.type == 'board_game':
+                actions = list(map(lambda a: ''.join(
+                    idx_to_cellstr(a, game.size)), game.legal_actions()))
+                action_str = input(f'Legal moves are {actions}, choose one: ')
+                action = cellstr_to_idx(action_str, game.size)
+            else:
+                action_str = input(f'Legal moves are {actions}, choose one: ')
+                action = int(action_str)
+        return action
