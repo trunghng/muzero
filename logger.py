@@ -2,7 +2,7 @@ from datetime import datetime as dt
 import json
 import os
 import os.path as osp
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import matplotlib.pyplot as plt
 import torch
@@ -13,13 +13,17 @@ from shared_storage import SharedStorage
 class Logger:
 
     def __init__(self,
-                 exp_name: str):
+                 exp_name: str,
+                 mode: str):
         self.log_dir = osp.join(os.getcwd(), 'data', exp_name)\
             if exp_name else f'/tmp/experiments/{str(dt.now())}'
         if not osp.exists(self.log_dir):
             os.makedirs(self.log_dir)
-        self.log_file = open(osp.join(self.log_dir, 'loss.txt'), 'w')
-        self.losses = []
+        if mode == 'train':
+            self.log_file = open(osp.join(self.log_dir, 'loss.txt'), 'w')
+            self.losses = []
+        else:
+            self.log_file = open(osp.join(self.log_dir, 'rewards.txt'), 'w')
 
     def save_config(self, config: Dict) -> None:
         del config['visit_softmax_temperature_func']
@@ -32,7 +36,7 @@ class Logger:
     def save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         torch.save(checkpoint, osp.join(self.log_dir, 'model.checkpoint'))
 
-    def log(self, loss: float) -> None:
+    def log_loss(self, loss: float) -> None:
         self.losses.append(loss)
         self.log_file.write(str(loss) + '\n')
         self.log_file.flush()
@@ -41,3 +45,7 @@ class Logger:
         plt.ylabel('loss')
         plt.savefig(osp.join(self.log_dir, 'loss.png'))
         plt.close()
+
+    def log_reward(self, rewards: List[float]) -> None:
+        self.log_file.write(','.join(map(str, rewards)) + '\n')
+        self.log_file.flush()

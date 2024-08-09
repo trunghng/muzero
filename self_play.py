@@ -66,24 +66,30 @@ class SelfPlay:
                 )
                 replay_buffer.add.remote(game_history, shared_storage)
 
-    def play(self, temperature: float, opponent: str, muzero_player: int) -> GameHistory:
+    def play(self,
+             temperature: float,
+             opponent: str,
+             muzero_player: int,
+             render: bool) -> GameHistory:
         """Play a game with MuZero player
 
         :param temperature:
-        :param opponent: opponent of MuZero agent
+        :param opponent: Opponent of MuZero agent
             1. 'self'   play with itself
             2. 'human'  play with a human
             3. 'random' play with a random player
         :param muzero_player: MuZero's turn order
             1. -1       play first or MuZero is the only player (self-play or 1p games)
             2. 1        play second
+        :param render: Whether to render the game
         """
         observation = self.game.reset()
         game_history = GameHistory(self.game)
+        self.game.render()
 
         with torch.no_grad():
             while True:
-                if opponent == 'self' or muzero_player == self.game.to_play():
+                if opponent == 'self' or muzero_player == self.game.to_play:
                     stacked_observations = game_history.stack_observations(
                         -1, self.config.stacked_observations, self.config.action_space_size, self.config.stack_action
                     )
@@ -99,6 +105,7 @@ class SelfPlay:
                 next_observation, reward, terminated = self.game.step(action)
                 game_history.save(observation, action, reward, self.game.to_play, action_probs, root.value())
                 observation = next_observation
+                self.game.render()
 
                 if terminated or len(game_history) > self.config.max_moves:
                     break

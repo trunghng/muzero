@@ -1,5 +1,6 @@
 from copy import deepcopy
 import os
+import time
 
 import numpy as np
 import ray
@@ -46,7 +47,7 @@ class MuZero:
         self.replay_buffer_worker = None
         self.shared_storage_worker = None
 
-        self.logger = Logger(config.exp_name)
+        self.logger = Logger(config.exp_name, config.mode)
         self.logger.save_config(vars(deepcopy(config)))
 
     def train(self) -> None:
@@ -89,7 +90,7 @@ class MuZero:
                     if info['training_step'] % self.config.checkpoint_interval == 0:
                         checkpoint = ray.get(self.shared_storage_worker.get_checkpoint.remote())
                         self.logger.save_checkpoint(checkpoint)
-                    self.logger.log(info['loss'])
+                    self.logger.log_loss(info['loss'])
                     last_step += 1
         except KeyboardInterrupt:
             pass
@@ -98,18 +99,28 @@ class MuZero:
         checkpoint = torch.load(os.path.join(self.config.log_dir, 'model.checkpoint'))
         self_play_worker = SelfPlay.remote(self.game, checkpoint, self.config)
         histories = []
-        for _ in tqdm(range(self.config.n_tests), desc=f'Testing'):
-            histories.append(ray.get(self_play_worker.play.remote(
-                    0,  # select actions with max #visits
-                    self.config.opponent, self.config.muzero_player)
-                )
+        for _ in tqdm(range(self.config.tests), desc=f'Testing'):
+            history = ray.get(self_play_worker.play.remote(
+                0,  # select actions with max #visits
+                self.config.opponent,
+                self.config.muzero_player,
+                self.config.render)
             )
+            self.logger.log_reward(history.rewards)
+            histories.append(history)
 
         if self.config.players == 1:
             result = np.mean([sum(history.rewards) for history in histories])
+            print(result)
         else:
-            result = np.mean([
+            p1_wr = np.mean([
                 sum(reward for i, reward in enumerate(history.rewards)
-                if history.to_plays[i - 1] == self.config.muzero_player) for history in histories
+                if history.to_plays[i - 1] == -1) for history in histories
             ])
-        print(result)
+            p2_wr = np.mean([
+                sum(reward for i, reward in enumerate(history.rewards)
+                if history.to_plays[i - 1] == 1) for history in histories
+            ])
+            time.sleep(1)
+            print(f'P1 win rate: {p1_wr * 100:.2f}%\nP2 win rate: {p2_wr * 100:.2f}%\
+                \nDraw: {(1 - p1_wr - p2_wr) * 100:.2f}%')

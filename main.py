@@ -41,7 +41,7 @@ if __name__ == '__main__':
                        help='Number of MCTS simulations')
         p.add_argument('--gamma', type=float, default=1,
                        help='Discount factor')
-        p.add_argument('--root-dirichlet-alpha', type=float, default=0.1,
+        p.add_argument('--root-dirichlet-alpha', type=float, default=0.2,
                        help='')
         p.add_argument('--root-exploration-fraction', type=float, default=0.25,
                        help='')
@@ -67,21 +67,21 @@ if __name__ == '__main__':
                               help='')
     train_parser.add_argument('--stack-action', action='store_true',
                               help='Whether to attach historical actions when stacking observations')
-    train_parser.add_argument('--blocks', type=int, default=1,
+    train_parser.add_argument('--blocks', type=int, default=3,
                               help='Number of residual blocks in the ResNet')
-    train_parser.add_argument('--channels', type=int, default=16,
+    train_parser.add_argument('--channels', type=int, default=64,
                               help='Number of channels in the ResNet')
-    train_parser.add_argument('--reduced-channels-reward', type=int, default=16,
+    train_parser.add_argument('--reduced-channels-reward', type=int, default=8,
                               help='Number of channels in reward head')
-    train_parser.add_argument('--reduced-channels-policy', type=int, default=16,
+    train_parser.add_argument('--reduced-channels-policy', type=int, default=8,
                               help='Number of channels in policy head')
-    train_parser.add_argument('--reduced-channels-value', type=int, default=16,
+    train_parser.add_argument('--reduced-channels-value', type=int, default=8,
                               help='Number of channels in value head')
-    train_parser.add_argument('--fc-reward-layers', type=int, nargs='+', default=[8],
+    train_parser.add_argument('--fc-reward-layers', type=int, nargs='+', default=[16],
                               help='Hidden layers in reward head')
-    train_parser.add_argument('--fc-policy-layers', type=int, nargs='+', default=[8],
+    train_parser.add_argument('--fc-policy-layers', type=int, nargs='+', default=[16],
                               help='Hidden layers in policy head')
-    train_parser.add_argument('--fc-value-layers', type=int, nargs='+', default=[8],
+    train_parser.add_argument('--fc-value-layers', type=int, nargs='+', default=[16],
                               help='Hidden layers in value head')
     train_parser.add_argument('--downsample', action='store_true',
                               help='Whether to downsample observations before representation network')
@@ -97,16 +97,16 @@ if __name__ == '__main__':
                               help='Number of unroll steps')
     train_parser.add_argument('--training-steps', type=int, default=100000,
                               help='Number of training steps')
-    train_parser.add_argument('--lr', type=float, default=0.003,
+    train_parser.add_argument('--lr', type=float, default=0.005,
                               help='Learning rate')
-    train_parser.add_argument('--weight-decay', type=float, default=1e-4,
+    train_parser.add_argument('--weight-decay', type=float, default=1e-5,
                               help='Weight decay')
-    train_parser.add_argument('--support-limit', type=int, default=10,
+    train_parser.add_argument('--support-limit', type=int, default=1,
                               help='Support limit')
     train_parser.add_argument('--value-loss-weight', type=float, default=0.25,
                               help='Weight of value loss in total loss function')
 
-    test_parser.add_argument('--n-tests', type=int, default=100,
+    test_parser.add_argument('--tests', type=int, default=100,
                              help='Number of games for testing')
     test_parser.add_argument('--render', action='store_true',
                              help='Whether to render each game during testing')
