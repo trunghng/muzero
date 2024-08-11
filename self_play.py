@@ -19,8 +19,9 @@ class SelfPlay:
     def __init__(self,
                  game: Game,
                  initial_checkpoint: Dict[str, Any],
-                 config) -> None:
-        set_seed(config.seed)
+                 config,
+                 seed: int) -> None:
+        set_seed(seed)
         self.config = config
         self.game = game
         self.mcts = MCTS(self.config)
@@ -70,7 +71,7 @@ class SelfPlay:
              temperature: float,
              opponent: str,
              muzero_player: int,
-             render: bool) -> GameHistory:
+             render: bool=False) -> GameHistory:
         """Play a game with MuZero player
 
         :param temperature:
@@ -85,7 +86,8 @@ class SelfPlay:
         """
         observation = self.game.reset()
         game_history = GameHistory(self.game)
-        self.game.render()
+        if render:
+            self.game.render()
 
         with torch.no_grad():
             while True:
@@ -105,7 +107,8 @@ class SelfPlay:
                 next_observation, reward, terminated = self.game.step(action)
                 game_history.save(observation, action, reward, self.game.to_play, action_probs, root.value())
                 observation = next_observation
-                self.game.render()
+                if render:
+                    self.game.render()
 
                 if terminated or len(game_history) > self.config.max_moves:
                     break

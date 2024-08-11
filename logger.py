@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime as dt
 import json
 import os
@@ -21,7 +22,7 @@ class Logger:
             os.makedirs(self.log_dir)
         if mode == 'train':
             self.log_file = open(osp.join(self.log_dir, 'loss.txt'), 'w')
-            self.losses = []
+            self.losses = defaultdict(list)
         else:
             self.log_file = open(osp.join(self.log_dir, 'rewards.txt'), 'w')
 
@@ -36,16 +37,26 @@ class Logger:
     def save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         torch.save(checkpoint, osp.join(self.log_dir, 'model.checkpoint'))
 
-    def log_loss(self, loss: float) -> None:
-        self.losses.append(loss)
-        self.log_file.write(str(loss) + '\n')
+    def log_loss(self, losses: Dict) -> None:
+        if not self.losses:
+            self.log_file.write(','.join(list(losses.keys())) + '\n')
+
+        for k, v in losses.items():
+            self.losses[k].append(v)
+        self.log_file.write(','.join(['{:.4f}'.format(l) for l in list(losses.values())]) + '\n')
         self.log_file.flush()
-        plt.plot(range(1, len(self.losses) + 1), self.losses, c='blue')
+
+        for k, v in self.losses.items():
+            plt.plot(range(1, len(v) + 1), v, label=k)
         plt.xlabel('step')
         plt.ylabel('loss')
+        plt.legend(loc='upper right')
         plt.savefig(osp.join(self.log_dir, 'loss.png'))
         plt.close()
 
     def log_reward(self, rewards: List[float]) -> None:
         self.log_file.write(','.join(map(str, rewards)) + '\n')
         self.log_file.flush()
+
+    def close(self):
+        self.log_file.close()

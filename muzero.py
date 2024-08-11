@@ -1,4 +1,5 @@
 from copy import deepcopy
+import math
 import os
 import time
 
@@ -29,7 +30,7 @@ class MuZero:
             'optimizer_state_dict': None,   # Optimizer state dict
             'episode_length': 0,            # Episode length
             'episode_return': 0,            # Episode return
-            'mean_value': 0,                # Mean across non-zero value functions produced by MCTS
+            'mean_value': 0,                # Mean across non-zero value funcs produced by MCTS
             'lr': 0,                        # Current learning rate
             'loss': 0,                      # Total loss
             'value_loss': 0,                # Value loss
@@ -55,25 +56,35 @@ class MuZero:
         n_cpus = 0 if n_gpus > 0 else 1
 
         self.self_play_workers = [
-            SelfPlay.remote(deepcopy(self.game), self.checkpoint, self.config)
-            for _ in range(self.config.workers)
+            SelfPlay.remote(
+                deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i
+            ) for i in range(self.config.workers)
         ]
-        self.training_worker = Trainer.options(num_cpus=n_cpus, num_gpus=n_gpus).remote(self.checkpoint, self.config)
+        self.training_worker = Trainer.options(
+            num_cpus=n_cpus, num_gpus=n_gpus
+        ).remote(self.checkpoint, self.config)
         self.replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.config)
         self.shared_storage_worker = SharedStorage.remote(self.checkpoint)
         self.shared_storage_worker.set_info.remote({'terminated': False})
 
         for self_play_worker in self.self_play_workers:
-            self_play_worker.play_continuously.remote(self.shared_storage_worker, self.replay_buffer_worker)
+            self_play_worker.play_continuously.remote(
+                self.shared_storage_worker, self.replay_buffer_worker
+            )
 
-        self.training_worker.update_weights_continuously.remote(self.shared_storage_worker, self.replay_buffer_worker)
+        self.training_worker.update_weights_continuously.remote(
+            self.shared_storage_worker, self.replay_buffer_worker
+        )
         self.log_continuously()
 
     def log_continuously(self) -> None:
-        self.test_worker = SelfPlay.remote(deepcopy(self.game), self.checkpoint, self.config)
+        self.test_worker = SelfPlay.remote(
+            deepcopy(self.game), self.checkpoint, self.config, self.config.seed
+        )
         self.test_worker.play_continuously.remote(self.shared_storage_worker, None, test=True)
         keys = [
-            'episode_length', 'episode_return', 'mean_value', 'training_step', 'played_games', 'loss'
+            'episode_length', 'episode_return', 'mean_value', 'training_step',
+            'played_games', 'loss', 'value_loss', 'reward_loss', 'policy_loss'
         ]
         info = ray.get(self.shared_storage_worker.get_info.remote(keys))
         last_step = 0
@@ -90,24 +101,42 @@ class MuZero:
                     if info['training_step'] % self.config.checkpoint_interval == 0:
                         checkpoint = ray.get(self.shared_storage_worker.get_checkpoint.remote())
                         self.logger.save_checkpoint(checkpoint)
-                    self.logger.log_loss(info['loss'])
+                    self.logger.log_loss({
+                        'value_loss': info['value_loss'],
+                        'reward_loss': info['reward_loss'],
+                        'policy_loss': info['policy_loss'],
+                        'total': info['loss']
+                    })
                     last_step += 1
+            self.logger.close()
         except KeyboardInterrupt:
             pass
 
     def test(self) -> None:
         checkpoint = torch.load(os.path.join(self.config.log_dir, 'model.checkpoint'))
-        self_play_worker = SelfPlay.remote(self.game, checkpoint, self.config)
+
+        start_time = time.time()
+        self_play_workers = [
+            SelfPlay.remote(deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i)
+            for i in range(self.config.workers)
+        ]
         histories = []
-        for _ in tqdm(range(self.config.tests), desc=f'Testing'):
-            history = ray.get(self_play_worker.play.remote(
-                0,  # select actions with max #visits
-                self.config.opponent,
-                self.config.muzero_player,
-                self.config.render)
-            )
-            self.logger.log_reward(history.rewards)
-            histories.append(history)
+        for _ in tqdm(range(math.ceil(self.config.tests / self.config.workers)), desc=f'Testing'):
+            hs = [
+                ray.get(worker.play.remote(
+                    0,  # select actions with max #visits
+                    self.config.opponent,
+                    self.config.muzero_player,
+                    self.config.render)
+                ) for worker in self_play_workers
+            ]
+            for h in hs:
+                self.logger.log_reward(h.rewards)
+                histories.append(h)
+
+        elapsed = time.time() - start_time
+        print('time', elapsed)
+        self.logger.close()
 
         if self.config.players == 1:
             result = np.mean([sum(history.rewards) for history in histories])

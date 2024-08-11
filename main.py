@@ -31,6 +31,8 @@ if __name__ == '__main__':
                        default='tictactoe', help='Game name')
         p.add_argument('--size', type=int, default=3,
                        help='Board size (if relevant)')
+        p.add_argument('--workers', type=int, default=1,
+                       help='Number of self-play workers')
         p.add_argument('--exp-name', type=str, default='muzero',
                        help='Experiment name')
         p.add_argument('--seed', type=int, default=0,
@@ -49,7 +51,7 @@ if __name__ == '__main__':
                        help='')
         p.add_argument('--c-init', type=float, default=1.25,
                        help='')
-        p.add_argument('--opponent', type=str, choices=['self', 'human', 'random'], default='self',
+        p.add_argument('--opponent', type=str, choices=['self', 'human', 'random'], default='random',
                        help='Opponent to test, or evalute in train mode:\n'
                        '   1. self: play with itself\n'
                        '   2. human: play with a human\n'
@@ -61,27 +63,25 @@ if __name__ == '__main__':
 
     train_parser.add_argument('--gpu', action='store_true',
                               help='Whether to enable GPU (if available)')
-    train_parser.add_argument('--workers', type=int, default=1,
-                              help='Number of self-play workers')
     train_parser.add_argument('--stacked-observations', type=int, default=1,
                               help='')
     train_parser.add_argument('--stack-action', action='store_true',
                               help='Whether to attach historical actions when stacking observations')
-    train_parser.add_argument('--blocks', type=int, default=3,
+    train_parser.add_argument('--blocks', type=int, default=1,
                               help='Number of residual blocks in the ResNet')
-    train_parser.add_argument('--channels', type=int, default=64,
+    train_parser.add_argument('--channels', type=int, default=16,
                               help='Number of channels in the ResNet')
-    train_parser.add_argument('--reduced-channels-reward', type=int, default=8,
+    train_parser.add_argument('--reduced-channels-reward', type=int, default=16,
                               help='Number of channels in reward head')
-    train_parser.add_argument('--reduced-channels-policy', type=int, default=8,
+    train_parser.add_argument('--reduced-channels-policy', type=int, default=16,
                               help='Number of channels in policy head')
-    train_parser.add_argument('--reduced-channels-value', type=int, default=8,
+    train_parser.add_argument('--reduced-channels-value', type=int, default=16,
                               help='Number of channels in value head')
-    train_parser.add_argument('--fc-reward-layers', type=int, nargs='+', default=[16],
+    train_parser.add_argument('--fc-reward-layers', type=int, nargs='+', default=[8],
                               help='Hidden layers in reward head')
-    train_parser.add_argument('--fc-policy-layers', type=int, nargs='+', default=[16],
+    train_parser.add_argument('--fc-policy-layers', type=int, nargs='+', default=[8],
                               help='Hidden layers in policy head')
-    train_parser.add_argument('--fc-value-layers', type=int, nargs='+', default=[16],
+    train_parser.add_argument('--fc-value-layers', type=int, nargs='+', default=[8],
                               help='Hidden layers in value head')
     train_parser.add_argument('--downsample', action='store_true',
                               help='Whether to downsample observations before representation network')
@@ -93,13 +93,13 @@ if __name__ == '__main__':
                               help='Replay buffer size')
     train_parser.add_argument('--td-steps', type=int, default=9,
                               help='Number of steps in the future to take into account for calculating the target value')
-    train_parser.add_argument('--unroll-steps', type=int, default=5,
+    train_parser.add_argument('--unroll-steps', type=int, default=3,
                               help='Number of unroll steps')
     train_parser.add_argument('--training-steps', type=int, default=100000,
                               help='Number of training steps')
-    train_parser.add_argument('--lr', type=float, default=0.005,
+    train_parser.add_argument('--lr', type=float, default=0.0001,
                               help='Learning rate')
-    train_parser.add_argument('--weight-decay', type=float, default=1e-5,
+    train_parser.add_argument('--weight-decay', type=float, default=1e-4,
                               help='Weight decay')
     train_parser.add_argument('--support-limit', type=int, default=1,
                               help='Support limit')
