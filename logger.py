@@ -6,8 +6,10 @@ import os.path as osp
 from typing import Any, Dict, List
 
 import matplotlib.pyplot as plt
+import ray
 import torch
 
+from self_play import SelfPlay
 from shared_storage import SharedStorage
 
 
@@ -36,6 +38,41 @@ class Logger:
 
     def save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         torch.save(checkpoint, osp.join(self.log_dir, 'model.checkpoint'))
+
+    def log_continuously(self,
+                         config,
+                         test_worker,
+                         shared_storage_worker) -> None:
+        test_worker.play_continuously.remote(shared_storage_worker, None, test=True)
+        keys = [
+            'episode_length', 'episode_return', 'mean_value', 'training_step',
+            'played_games', 'loss', 'value_loss', 'reward_loss', 'policy_loss'
+        ]
+        info = ray.get(shared_storage_worker.get_info.remote(keys))
+        last_step = 0
+
+        try:
+            while info['training_step'] < config.training_steps:
+                info = ray.get(shared_storage_worker.get_info.remote(keys))
+                if info['training_step'] > last_step:
+                    print(f'\rEpisode return: {info["episode_return"]:.2f}. '
+                          + f'Training step: {info["training_step"]}/{config.training_steps}. '
+                          + f'Played games: {info["played_games"]}. '
+                          + f'Loss: {info["loss"]:.2f}', end="")
+
+                    if info['training_step'] % config.checkpoint_interval == 0:
+                        checkpoint = ray.get(shared_storage_worker.get_checkpoint.remote())
+                        self.save_checkpoint(checkpoint)
+                    self.log_loss({
+                        'value_loss': info['value_loss'],
+                        'reward_loss': info['reward_loss'],
+                        'policy_loss': info['policy_loss'],
+                        'total': info['loss']
+                    })
+                    last_step += 1
+            self.close()
+        except KeyboardInterrupt:
+            pass
 
     def log_loss(self, losses: Dict) -> None:
         if not self.losses:

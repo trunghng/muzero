@@ -44,12 +44,11 @@ class MuZero:
 
         self.self_play_workers = None
         self.training_worker = None
-        self.test_worker = None
         self.replay_buffer_worker = None
         self.shared_storage_worker = None
-
-        self.logger = Logger(config.exp_name, config.mode)
-        self.logger.save_config(vars(deepcopy(config)))
+        self.test_worker = None
+        self.logger = Logger(self.config.exp_name, self.config.mode)
+        self.logger.save_config(vars(deepcopy(self.config)))
 
     def train(self) -> None:
         n_gpus = 0 if self.config.device == 'cpu' else torch.cuda.device_count()
@@ -66,61 +65,27 @@ class MuZero:
         self.replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.config)
         self.shared_storage_worker = SharedStorage.remote(self.checkpoint)
         self.shared_storage_worker.set_info.remote({'terminated': False})
+        self.test_worker = SelfPlay.remote(
+            deepcopy(self.game), self.checkpoint, self.config, self.config.seed
+        )
 
         for self_play_worker in self.self_play_workers:
             self_play_worker.play_continuously.remote(
                 self.shared_storage_worker, self.replay_buffer_worker
             )
-
         self.training_worker.update_weights_continuously.remote(
             self.shared_storage_worker, self.replay_buffer_worker
         )
-        self.log_continuously()
-
-    def log_continuously(self) -> None:
-        self.test_worker = SelfPlay.remote(
-            deepcopy(self.game), self.checkpoint, self.config, self.config.seed
-        )
-        self.test_worker.play_continuously.remote(self.shared_storage_worker, None, test=True)
-        keys = [
-            'episode_length', 'episode_return', 'mean_value', 'training_step',
-            'played_games', 'loss', 'value_loss', 'reward_loss', 'policy_loss'
-        ]
-        info = ray.get(self.shared_storage_worker.get_info.remote(keys))
-        last_step = 0
-
-        try:
-            while info['training_step'] < self.config.training_steps:
-                info = ray.get(self.shared_storage_worker.get_info.remote(keys))
-                if info['training_step'] > last_step:
-                    print(f'\rEpisode return: {info["episode_return"]:.2f}. '
-                          + f'Training step: {info["training_step"]}/{self.config.training_steps}. '
-                          + f'Played games: {info["played_games"]}. '
-                          + f'Loss: {info["loss"]:.2f}', end="")
-
-                    if info['training_step'] % self.config.checkpoint_interval == 0:
-                        checkpoint = ray.get(self.shared_storage_worker.get_checkpoint.remote())
-                        self.logger.save_checkpoint(checkpoint)
-                    self.logger.log_loss({
-                        'value_loss': info['value_loss'],
-                        'reward_loss': info['reward_loss'],
-                        'policy_loss': info['policy_loss'],
-                        'total': info['loss']
-                    })
-                    last_step += 1
-            self.logger.close()
-        except KeyboardInterrupt:
-            pass
+        self.logger.log_continuously(self.config, self.test_worker, self.shared_storage_worker)
 
     def test(self) -> None:
         checkpoint = torch.load(os.path.join(self.config.log_dir, 'model.checkpoint'))
-
-        start_time = time.time()
         self_play_workers = [
-            SelfPlay.remote(deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i)
+            SelfPlay.remote(deepcopy(self.game), checkpoint, self.config, self.config.seed + 10 * i)
             for i in range(self.config.workers)
         ]
         histories = []
+
         for _ in tqdm(range(math.ceil(self.config.tests / self.config.workers)), desc=f'Testing'):
             hs = [
                 ray.get(worker.play.remote(
@@ -133,9 +98,6 @@ class MuZero:
             for h in hs:
                 self.logger.log_reward(h.rewards)
                 histories.append(h)
-
-        elapsed = time.time() - start_time
-        print('time', elapsed)
         self.logger.close()
 
         if self.config.players == 1:
