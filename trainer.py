@@ -4,18 +4,20 @@ import time
 import ray
 import torch
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 
 from network import MuZeroNetwork
+from network_utils import scalar_to_support, scale_gradient, update_lr, dict_to_cpu
 from replay_buffer import ReplayBuffer
 from shared_storage import SharedStorage
-from network_utils import scalar_to_support, scale_gradient, dict_to_cpu
+from utils import set_seed
 
 
 @ray.remote
 class Trainer:
 
     def __init__(self, initial_checkpoint: Dict[str, Any], config) -> None:
+        set_seed(config.seed)
         self.config = config
         self.network = MuZeroNetwork(config.observation_dim,
                                      config.action_space_size,
@@ -29,11 +31,15 @@ class Trainer:
                                      config.fc_policy_layers,
                                      config.fc_value_layers,
                                      config.downsample,
-                                     config.support_limit).to(self.config.device)
+                                     config.support_limit).to(config.device)
         self.network.set_weights(initial_checkpoint['model_state_dict'])
         self.network.train()
-        self.optimizer = Adam(self.network.parameters(), lr=self.config.lr,
-                              weight_decay=self.config.weight_decay)
+        if config.optimizer == 'Adam':
+            self.optimizer = Adam(self.network.parameters(), lr=config.lr,
+                                  weight_decay=config.weight_decay)
+        else:
+            self.optimizer = SGD(self.network.parameters(), lr=config.lr,
+                                 momentum=config.momentum, weight_decay=config.weight_decay)
         if initial_checkpoint['optimizer_state_dict'] is not None:
             self.optimizer.load_state_dict(initial_checkpoint['optimizer_state_dict'])
         self.training_step = initial_checkpoint['training_step']
@@ -47,7 +53,10 @@ class Trainer:
         while self.training_step < self.config.training_steps\
                 and not ray.get(shared_storage.get_info.remote('terminated')):
             batch = ray.get(replay_buffer.sample.remote())
+            update_lr(self.config.lr, self.config.lr_decay_rate, self.config.lr_decay_steps, 
+                      self.training_step, self.optimizer)
             loss, value_loss, reward_loss, policy_loss = self.update_weights(batch)
+
             if self.training_step % self.config.checkpoint_interval == 0:
                 shared_storage.set_info.remote({
                     'model_state_dict': dict_to_cpu(self.network.state_dict()),
@@ -87,8 +96,10 @@ class Trainer:
         for k in range(len(predictions)):
             loss_scale, value, reward, policy_logits = predictions[k]
 
-            value_loss_k, reward_loss_k, policy_loss_k = self.loss(value, reward, policy_logits,
-                                value_target_batch[:, k], reward_target_batch[:, k], policy_target_batch[:, k])
+            value_loss_k, reward_loss_k, policy_loss_k = self.loss(
+                value, reward, policy_logits, value_target_batch[:, k],
+                reward_target_batch[:, k], policy_target_batch[:, k]
+            )
             scale_gradient(value_loss_k, loss_scale)
             scale_gradient(reward_loss_k, loss_scale)
             scale_gradient(policy_loss_k, loss_scale)

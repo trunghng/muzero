@@ -41,8 +41,8 @@ class Logger:
 
     def log_continuously(self,
                          config,
-                         test_worker,
-                         shared_storage_worker) -> None:
+                         test_worker: SelfPlay,
+                         shared_storage_worker: SharedStorage) -> None:
         test_worker.play_continuously.remote(shared_storage_worker, None, test=True)
         keys = [
             'episode_length', 'episode_return', 'mean_value', 'training_step',
@@ -74,7 +74,7 @@ class Logger:
         except KeyboardInterrupt:
             pass
 
-    def log_loss(self, losses: Dict) -> None:
+    def log_loss(self, losses: Dict[str, float]) -> None:
         if not self.losses:
             self.log_file.write(','.join(list(losses.keys())) + '\n')
 

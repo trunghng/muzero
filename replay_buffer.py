@@ -8,12 +8,14 @@ import torch
 
 from game import GameHistory
 from shared_storage import SharedStorage
+from utils import set_seed
 
 
 @ray.remote
 class ReplayBuffer:
 
     def __init__(self, initial_checkpoint: Dict[str, Any], config) -> None:
+        set_seed(config.seed)
         self.config = config
         self.memory = deque(maxlen=self.config.buffer_size)
         self.played_games = initial_checkpoint['played_games']

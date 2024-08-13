@@ -96,6 +96,17 @@ def scale_gradient(x: torch.Tensor, scale_factor: float) -> torch.Tensor:
     x.register_hook(lambda grad: grad * scale_factor)
 
 
+def update_lr(lr_init: float,
+              decay_rate: float,
+              decay_steps: int,
+              training_step: int,
+              optimizer: torch.optim.Optimizer) -> None:
+    """Exponential learning rate schedule"""
+    lr = lr_init * decay_rate ** (training_step / decay_steps)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
 def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     cpu_dict = {}
     for key, value in state_dict.items():

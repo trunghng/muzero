@@ -1,4 +1,5 @@
 import argparse
+from argparse import RawTextHelpFormatter
 import json
 import os
 
@@ -21,9 +22,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='MuZero')
 
     mode_parsers = parser.add_subparsers(title='Modes')
-    train_parser = mode_parsers.add_parser('train')
+    train_parser = mode_parsers.add_parser('train', formatter_class=RawTextHelpFormatter)
     train_parser.set_defaults(mode='train')
-    test_parser = mode_parsers.add_parser('test')
+    test_parser = mode_parsers.add_parser('test', formatter_class=RawTextHelpFormatter)
     test_parser.set_defaults(mode='test')
 
     for p in [train_parser, test_parser]:
@@ -31,7 +32,7 @@ if __name__ == '__main__':
                        default='tictactoe', help='Game name')
         p.add_argument('--size', type=int, default=3,
                        help='Board size (if relevant)')
-        p.add_argument('--workers', type=int, default=1,
+        p.add_argument('--workers', type=int, default=2,
                        help='Number of self-play workers')
         p.add_argument('--exp-name', type=str, default='muzero',
                        help='Experiment name')
@@ -56,10 +57,10 @@ if __name__ == '__main__':
                        '   1. self: play with itself\n'
                        '   2. human: play with a human\n'
                        '   3. random: play with a random player')
-        p.add_argument('--muzero-player', type=int, default=-1,
+        p.add_argument('--muzero-player', type=int, choices=[-1, 1], default=-1,
                        help="MuZero's turn order in test, or in evaluation during train:\n"
-                       '    1. -1: plays first or MuZero is the only player (self-play or 1p games)\n'
-                       '    2. 1: plays second')
+                       '   1. -1: plays first or MuZero is the only player (self-play or 1p games)\n'
+                       '   2. 1: plays second')
 
     train_parser.add_argument('--gpu', action='store_true',
                               help='Whether to enable GPU (if available)')
@@ -90,17 +91,25 @@ if __name__ == '__main__':
     train_parser.add_argument('--checkpoint-interval', type=int, default=10,
                               help='Checkpoint interval')
     train_parser.add_argument('--buffer-size', type=int, default=3000,
-                              help='Replay buffer size')
+                              help='Maximum number of self-play games to save in the replay buffer')
     train_parser.add_argument('--td-steps', type=int, default=9,
                               help='Number of steps in the future to take into account for calculating the target value')
     train_parser.add_argument('--unroll-steps', type=int, default=3,
                               help='Number of unroll steps')
     train_parser.add_argument('--training-steps', type=int, default=100000,
                               help='Number of training steps')
+    train_parser.add_argument('--optimizer', type=str, choices=['SGD, Adam'], default='Adam',
+                              help='Optimizer for network training')
     train_parser.add_argument('--lr', type=float, default=0.0001,
                               help='Learning rate')
+    train_parser.add_argument('--momentum', type=float, default=0.9,
+                              help='Momentum factor, exclusively used for SGD optimizer')
     train_parser.add_argument('--weight-decay', type=float, default=1e-4,
                               help='Weight decay')
+    train_parser.add_argument('--lr-decay-rate', type=float, default=1,
+                              help='Decay rate, used for exponential learning rate schedule')
+    train_parser.add_argument('--lr-decay-steps', type=int, default=10000,
+                              help='Number of decay steps, used for exponential learning rate schedule')
     train_parser.add_argument('--support-limit', type=int, default=1,
                               help='Support limit')
     train_parser.add_argument('--value-loss-weight', type=float, default=0.25,

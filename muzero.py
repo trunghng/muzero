@@ -6,7 +6,6 @@ import time
 import numpy as np
 import ray
 import torch
-from tqdm import tqdm
 
 from game import Game
 from logger import Logger
@@ -39,14 +38,10 @@ class MuZero:
             'training_step': 0,             # Current training step
             'terminated': False,            # Whether the current game is over
             'played_games': 0,              # Number of games played
-            'played_steps': 0               # Number of steps played
+            'played_steps': 0,              # Number of steps played
+            'reanalysed_games': 0           # Number of reanalysed games played
         }
 
-        self.self_play_workers = None
-        self.training_worker = None
-        self.replay_buffer_worker = None
-        self.shared_storage_worker = None
-        self.test_worker = None
         self.logger = Logger(self.config.exp_name, self.config.mode)
         self.logger.save_config(vars(deepcopy(self.config)))
 
@@ -54,29 +49,29 @@ class MuZero:
         n_gpus = 0 if self.config.device == 'cpu' else torch.cuda.device_count()
         n_cpus = 0 if n_gpus > 0 else 1
 
-        self.self_play_workers = [
+        self_play_workers = [
             SelfPlay.remote(
                 deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i
             ) for i in range(self.config.workers)
         ]
-        self.training_worker = Trainer.options(
+        training_worker = Trainer.options(
             num_cpus=n_cpus, num_gpus=n_gpus
         ).remote(self.checkpoint, self.config)
-        self.replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.config)
-        self.shared_storage_worker = SharedStorage.remote(self.checkpoint)
-        self.shared_storage_worker.set_info.remote({'terminated': False})
-        self.test_worker = SelfPlay.remote(
-            deepcopy(self.game), self.checkpoint, self.config, self.config.seed
+        replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.config)
+        shared_storage_worker = SharedStorage.remote(self.checkpoint)
+        shared_storage_worker.set_info.remote({'terminated': False})
+        test_worker = SelfPlay.remote(
+            deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * self.config.workers
         )
 
-        for self_play_worker in self.self_play_workers:
+        for self_play_worker in self_play_workers:
             self_play_worker.play_continuously.remote(
-                self.shared_storage_worker, self.replay_buffer_worker
+                shared_storage_worker, replay_buffer_worker
             )
-        self.training_worker.update_weights_continuously.remote(
-            self.shared_storage_worker, self.replay_buffer_worker
+        training_worker.update_weights_continuously.remote(
+            shared_storage_worker, replay_buffer_worker
         )
-        self.logger.log_continuously(self.config, self.test_worker, self.shared_storage_worker)
+        self.logger.log_continuously(self.config, test_worker, shared_storage_worker)
 
     def test(self) -> None:
         checkpoint = torch.load(os.path.join(self.config.log_dir, 'model.checkpoint'))
@@ -84,25 +79,26 @@ class MuZero:
             SelfPlay.remote(deepcopy(self.game), checkpoint, self.config, self.config.seed + 10 * i)
             for i in range(self.config.workers)
         ]
-        histories = []
 
-        for _ in tqdm(range(math.ceil(self.config.tests / self.config.workers)), desc=f'Testing'):
-            hs = [
-                ray.get(worker.play.remote(
+        histories = []
+        for _ in range(math.ceil(self.config.tests / self.config.workers)):
+            histories += [
+                worker.play.remote(
                     0,  # select actions with max #visits
                     self.config.opponent,
                     self.config.muzero_player,
-                    self.config.render)
+                    self.config.render
                 ) for worker in self_play_workers
             ]
-            for h in hs:
-                self.logger.log_reward(h.rewards)
-                histories.append(h)
+        histories = ray.get(histories)
+
+        for history in histories:
+            self.logger.log_reward(history.rewards)
         self.logger.close()
 
         if self.config.players == 1:
             result = np.mean([sum(history.rewards) for history in histories])
-            print(result)
+            print('Result:', result)
         else:
             p1_wr = np.mean([
                 sum(reward for i, reward in enumerate(history.rewards)
