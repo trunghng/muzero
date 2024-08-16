@@ -8,6 +8,7 @@ import torch
 
 from game import ActType, PlayerType
 from network import MuZeroNetwork
+from network_utils import ftensor
 
 
 class Node:
@@ -173,8 +174,8 @@ class MCTS:
         # policy_logits: (B x A)
         # hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h/16 x w/16)
         # value:         (1)
-        policy_logits, hidden_state, value = network.initial_inference(
-            torch.as_tensor(observation, dtype=torch.float32).unsqueeze(0)
+        policy_logits, hidden_state, _ = network.initial_inference(
+            ftensor(observation).unsqueeze(0)
         )
 
         root.expand(0, hidden_state, policy_logits, to_play, legal_actions)
@@ -196,7 +197,7 @@ class MCTS:
             parent = search_path[-2]
             policy_logits, hidden_state, value, reward = network.recurrent_inference(
                 parent.hidden_state,
-                torch.as_tensor(action_encoder(history[-1]), dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+                ftensor(action_encoder(history[-1])).unsqueeze(0).unsqueeze(0)
             )
 
             if self.config.players == 2:

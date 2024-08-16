@@ -4,7 +4,7 @@ from typing import Tuple, List, Any
 import torch
 import torch.nn as nn
 
-from network_utils import mlp, conv3x3, support_to_scalar, scalar_to_support, normalize_hidden_state
+from network_utils import mlp, conv3x3, support_to_scalar, normalize_hidden_state
 
 
 class ConvBlock(nn.Module):
@@ -136,8 +136,8 @@ class RepresentationNetwork(nn.Module):
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         """
-        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
-        :return hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :param observation:     (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
+        :return hidden_state:   (B x channels x h/16 x w/16) | (B x channels x h x w)
         """
         if self.downsample:
             out = self.downsample_net(observation)
@@ -171,15 +171,15 @@ class DynamicsNetwork(nn.Module):
 
     def forward(self, state_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        :param state_action: (B x (channels + 1) x h/16 x w/16) | (B x (channels + 1) x h x w)
-        :return next_hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return reward: (B x support_size)
+        :param state_action:        (B x (channels + 1) x h/16 x w/16) | (B x (channels + 1) x h x w)
+        :return next_hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :return reward_logits:      (B x support_size)
         """
         out = self.conv_block(state_action)
         out = self.res_tower(out)
         next_hidden_state = out
-        reward = self.reward_head(out)
-        return next_hidden_state, reward
+        reward_logits = self.reward_head(out)
+        return next_hidden_state, reward_logits
 
 
 class PredictionNetwork(nn.Module):
@@ -214,14 +214,14 @@ class PredictionNetwork(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return policy_logits: (B x action_space_size)
-        :return value: (B x support_size)
+        :param hidden_state:    (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :return policy_logits:  (B x action_space_size)
+        :return value_logits:   (B x support_size)
         """
         out = self.res_tower(hidden_state)
         policy_logits = self.policy_head(out)
-        value = self.value_head(out)
-        return policy_logits, value
+        value_logits = self.value_head(out)
+        return policy_logits, value_logits
 
 
 class MuZeroNetwork(nn.Module):
@@ -257,13 +257,22 @@ class MuZeroNetwork(nn.Module):
         self.repretation_network = RepresentationNetwork(
             observation_dim, stacked_observations, blocks, channels, downsample
         )
-        self.dynamics_network = DynamicsNetwork(
-            blocks, channels + 1, reduced_channels_reward, fc_reward_layers, support_size, block_output_size_reward
-        )
-        self.prediction_network = PredictionNetwork(
-            blocks, channels, reduced_channels_policy, reduced_channels_value, fc_policy_layers,
-            fc_value_layers, support_size, action_space_size, block_output_size_policy, block_output_size_value
-        )
+        self.dynamics_network = DynamicsNetwork(blocks,
+                                                channels + 1,
+                                                reduced_channels_reward,
+                                                fc_reward_layers,
+                                                support_size,
+                                                block_output_size_reward)
+        self.prediction_network = PredictionNetwork(blocks,
+                                                    channels,
+                                                    reduced_channels_policy,
+                                                    reduced_channels_value,
+                                                    fc_policy_layers,
+                                                    fc_value_layers,
+                                                    support_size,
+                                                    action_space_size,
+                                                    block_output_size_policy,
+                                                    block_output_size_value)
 
     def representation(self, observation: torch.Tensor) -> torch.Tensor:
         """
@@ -277,23 +286,23 @@ class MuZeroNetwork(nn.Module):
                  hidden_state: torch.Tensor,
                  encoded_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :param encoded_action: (B x 1 x h/16 x w/16) | (B x 1 x h x w)
-        :return next_hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return reward: (B x support_size)
+        :param hidden_state:        (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :param encoded_action:      (B x 1 x h/16 x w/16) | (B x 1 x h x w)
+        :return next_hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :return reward_logits:      (B x support_size)
         """
         state_action = torch.cat((hidden_state, encoded_action), dim=1)
-        next_hidden_state, reward = self.dynamics_network(state_action)
-        return normalize_hidden_state(next_hidden_state), reward
+        next_hidden_state, reward_logits = self.dynamics_network(state_action)
+        return normalize_hidden_state(next_hidden_state), reward_logits
 
     def prediction(self, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return policy_logits: (B x action_space_size)
-        :return value: (B x support_size)
+        :param hidden_state:    (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :return policy_logits:  (B x action_space_size)
+        :return value_logits:   (B x support_size)
         """
-        policy_logits, value = self.prediction_network(hidden_state)
-        return policy_logits, value
+        policy_logits, value_logits = self.prediction_network(hidden_state)
+        return policy_logits, value_logits
 
     def initial_inference(self,
                           observation: torch.Tensor,
@@ -301,17 +310,18 @@ class MuZeroNetwork(nn.Module):
         """
         Representation + Prediction function
 
-        :param observation: (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
+        :param observation:     (B x (stacked_obs * obs_dim[0] + stacked_obs) x h x w) | (B x stacked_obs x h x w)
         :param inv_transform: whether to apply inverse transformation on categorical form of value
-        :return policy_logits: (B x action_space_size)
-        :return hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return value: (1)
+        :return policy_logits:  (B x action_space_size)
+        :return hidden_state:   (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :return value:          (B) | (B x support_size)
         """
         hidden_state = self.representation(observation)
-        policy_logits, value = self.prediction(hidden_state)
+        policy_logits, value_logits = self.prediction(hidden_state)
         if inv_transform:
-            value = support_to_scalar(value, self.support_limit)
-        return policy_logits, hidden_state, value
+            value = support_to_scalar(value_logits, self.support_limit)
+            return policy_logits, hidden_state, value
+        return policy_logits, hidden_state, value_logits
 
     def recurrent_inference(self,
                             hidden_state: torch.Tensor,
@@ -320,20 +330,21 @@ class MuZeroNetwork(nn.Module):
         """
         Dynamics + Prediction function
 
-        :param hidden_state: (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :param encoded_action: (B x 1 x h/16 x w/16) | (B x 1 x h x w)
+        :param hidden_state:        (B x channels x h/16 x w/16) | (B x channels x h x w)
+        :param encoded_action:      (B x 1 x h/16 x w/16) | (B x 1 x h x w)
         :param scalar_transform: whether to apply transformation on value and reward
-        :return policy_logits: (B x action_space_size)
+        :return policy_logits:      (B x action_space_size)
         :return next_hidden_state:  (B x channels x h/16 x w/16) | (B x channels x h x w)
-        :return value: (1)
-        :return reward: (1)
+        :return value:              (B) | (B x support_size)
+        :return reward:             (B) | (B x support_size)
         """
-        next_hidden_state, reward = self.dynamics(hidden_state, encoded_action)
-        policy_logits, value = self.prediction(hidden_state)
+        next_hidden_state, reward_logits = self.dynamics(hidden_state, encoded_action)
+        policy_logits, value_logits = self.prediction(hidden_state)
         if scalar_transform:
-            reward = support_to_scalar(reward, self.support_limit)
-            value = support_to_scalar(value, self.support_limit)
-        return policy_logits, next_hidden_state, value, reward
+            reward = support_to_scalar(reward_logits, self.support_limit)
+            value = support_to_scalar(value_logits, self.support_limit)
+            return policy_logits, next_hidden_state, value, reward
+        return policy_logits, next_hidden_state, value_logits, reward_logits
 
     def set_weights(self, weights: Any) -> None:
         if weights is not None:

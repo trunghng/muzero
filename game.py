@@ -71,13 +71,14 @@ class GameHistory:
     """
 
     def __init__(self, game: Game) -> None:
-        self.observations = []          # o_t: State observations
-        self.actions = []               # a_{t+1}: Action leading from s_t -> s_{t+1}
+        self.observations = []              # o_t: State observations
+        self.actions = []                   # a_{t+1}: Action leading from s_t -> s_{t+1}
         self.encoded_actions = []
-        self.rewards = []               # u_{t+1}: Observed reward after performing a_{t+1}
-        self.to_plays = []              # p_t: Current player
-        self.action_probabilities = []  # pi_t: Action probabilities produced by MCTS
-        self.root_values = []           # v_t: MCTS value estimation
+        self.rewards = []                   # u_{t+1}: Observed reward after performing a_{t+1}
+        self.to_plays = []                  # p_t: Current player
+        self.action_probabilities = []      # pi_t: Action probabilities produced by MCTS
+        self.root_values = []               # v_t: MCTS value estimation
+        self.reanalysed_root_values = []
         self.action_encoder = game.action_encoder
         self.initial_observation = game.observation()
 
@@ -99,18 +100,17 @@ class GameHistory:
         self.action_probabilities.append(pi)
         self.root_values.append(root_value)
 
-    def stack_observations(self,
-                           t: int,
-                           stacked_observations: int,
-                           action_space_size: int,
-                           stack_action: bool) -> np.ndarray:
+    def stack_n_observations(self,
+                             t: int,
+                             n: int,
+                             action_space_size: int,
+                             stack_action: bool) -> np.ndarray:
         """
-        Stack 'stacked_observations' most recent observations (and
-        corresponding actions lead to the states with Atari) upto 't':
-            o_{t - stacked_observations + 1}, ..., o_t
+        Stack n most recent observations (and corresponding actions lead
+        to the states with Atari) upto 't': o_{t-n+1}, ..., o_t
 
         :param t: time step of the latest observation to stack
-        :param stacked_observations: number of observations to stack
+        :param n: number of observations to stack
         :param action_space_size: size of the action space
         :param stack_action: whether to stack historical actions
         """
@@ -119,39 +119,50 @@ class GameHistory:
             planes.append(self.initial_observation)
             if stack_action:
                 planes.append(np.zeros_like(self.initial_observation))
-            for _ in range(stacked_observations - 1):
+            for _ in range(n - 1):
                 planes.append(np.zeros_like(self.initial_observation))
                 if stack_action:
                     planes.append(np.zeros_like(self.initial_observation))
         else:
             # Convert to positive index
             t = t % len(self)
-            stacked_observations_ = min(stacked_observations, t + 1)
+            n_ = min(n, t + 1)
 
-            for step in reversed(range(t - stacked_observations_ + 1, t + 1)):
+            for step in reversed(range(t - n_ + 1, t + 1)):
                 planes.append(self.observations[step])
                 if stack_action:
                     planes.append(np.full_like(self.observations[step],
                         self.actions[step] / action_space_size))
 
             # If n_stack_observations > t + 1, we attach planes of zeros instead
-            for _ in range(stacked_observations - stacked_observations_):
+            for _ in range(n - n_):
                 planes.append(np.zeros_like(self.observations[step]))
                 if stack_action:
                     planes.append(np.zeros_like(self.observations[step]))
 
         return np.concatenate(planes, axis=0)
 
-    def compute_return(self, gamma: float) -> float:
+    def compute_return(self, gamma: float, player: PlayerType, players: int) -> float:
         """
-        Compute episode return, assuming that the game is over
-        G = r_1 + gamma * r_2 + ... + gamma^{T-1} * r_T
+        Compute episode return w.r.t the perspective of the player,
+        assuming that the game is over
+            G = r_1 + gamma * r_2 + ... + gamma^{T-1} * r_T
 
         :param gamma: discount factor
+        :param player: player turn
+        :param players: number of players
         """
-        eps_return = self.rewards[-1]
-        for r in reversed(self.rewards[0:-1]):
-            eps_return = eps_return * gamma + r
+        def __get_reward(reward, time_step):
+            if players == 2 and ((time_step % 2 == 0 and player == 1)\
+            or (time_step % 2 == 1 and player == -1)):
+                return -reward
+            else:
+                return reward
+
+        eps_return = __get_reward(self.rewards[-1], len(self.observations) - 1)
+        for i, r in enumerate(reversed(self.rewards[0:-1])):
+            reward = __get_reward(r, len(self.observations) - i)
+            eps_return = eps_return * gamma + reward
         return eps_return
 
     def make_target(
@@ -294,7 +305,9 @@ class TicTacToe(Game):
         one_hot_action[idx_to_cell(action, self.size)] = 1
         return one_hot_action
 
-    def visit_softmax_temperature_func(self, training_steps: int, training_step: int) -> float:
+    def visit_softmax_temperature_func(self,
+                                       training_steps: int,
+                                       training_step: int) -> float:
         """
         :param training_steps: number of training steps
         :param training_step: current training step

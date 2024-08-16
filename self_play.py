@@ -45,17 +45,19 @@ class SelfPlay:
                           shared_storage: SharedStorage,
                           replay_buffer: ReplayBuffer,
                           test: bool=False) -> None:
-        while ray.get(shared_storage.get_info.remote('training_step')) < self.config.training_steps \
-                and not ray.get(shared_storage.get_info.remote('terminated')):
+        while ray.get(shared_storage.get_info.remote('training_step')) < self.config.training_steps:
             self.network.set_weights(ray.get(shared_storage.get_info.remote('model_state_dict')))
             if test:
                 game_history = self.play(
                     0,  # select action with max #visits
                     'self' if self.config.players == 1 else self.config.opponent,
-                    self.config.muzero_player)
+                    self.config.muzero_player
+                )
                 shared_storage.set_info.remote({
                     'episode_length': len(game_history),
-                    'episode_return': game_history.compute_return(self.config.gamma),
+                    'episode_return': game_history.compute_return(
+                        self.config.gamma, self.config.muzero_player, self.config.players
+                    ),
                     'mean_value': np.mean([v for v in game_history.root_values if v])
                 })
             else:
@@ -92,7 +94,7 @@ class SelfPlay:
         with torch.no_grad():
             while True:
                 if opponent == 'self' or muzero_player == self.game.to_play:
-                    stacked_observations = game_history.stack_observations(
+                    stacked_observations = game_history.stack_n_observations(
                         -1, self.config.stacked_observations, self.config.action_space_size, self.config.stack_action
                     )
                     root = self.mcts.search(self.network, stacked_observations, self.game.legal_actions(),

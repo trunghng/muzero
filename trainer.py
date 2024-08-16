@@ -50,8 +50,7 @@ class Trainer:
         while ray.get(shared_storage.get_info.remote('played_games')) < 1:
             time.sleep(0.1)
 
-        while self.training_step < self.config.training_steps\
-                and not ray.get(shared_storage.get_info.remote('terminated')):
+        while self.training_step < self.config.training_steps:
             batch = ray.get(replay_buffer.sample.remote())
             update_lr(self.config.lr, self.config.lr_decay_rate, self.config.lr_decay_steps, 
                       self.training_step, self.optimizer)
@@ -75,29 +74,32 @@ class Trainer:
     def update_weights(
             self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         ) -> Tuple[float, float, float, float]:
+        # (B x (stack_obs * channels) x h x w), (B x (unroll_steps + 1)), (B x (unroll_steps + 1)),
+        # (B x (unroll_steps + 1)), (B x (unroll_steps + 1) x action_space_size)
         observation_batch, action_batch, value_target_batch, reward_target_batch, policy_target_batch\
                             = map(lambda x: x.to(self.config.device), batch)
+        # (B x (unroll_steps + 1) x support_size), (B x (unroll_steps + 1) x support_size)
         value_target_batch = scalar_to_support(value_target_batch, self.config.support_limit)
         reward_target_batch = scalar_to_support(reward_target_batch, self.config.support_limit)
 
-        policy_logits, hidden_state, value = self.network.initial_inference(observation_batch, False)
-        predictions = [(1.0, value, torch.zeros_like(value, requires_grad=True), policy_logits)]
+        policy_logits, hidden_state, value_logits = self.network.initial_inference(observation_batch, False)
+        predictions = [(1.0, value_logits, torch.zeros_like(value_logits, requires_grad=True), policy_logits)]
 
         for k in range(1, action_batch.shape[1]):
-            policy_logits, hidden_state, value, reward = self.network.recurrent_inference(
+            policy_logits, hidden_state, value_logits, reward_logits = self.network.recurrent_inference(
                 hidden_state, action_batch[:, k].unsqueeze(1), False
             )
 
             # Scale the gradient at the start of dynamics function by 0.5
             scale_gradient(hidden_state, 0.5)
-            predictions.append((1.0 / action_batch.shape[1], value, reward, policy_logits))
+            predictions.append((1.0 / action_batch.shape[1], value_logits, reward_logits, policy_logits))
 
         value_loss, reward_loss, policy_loss = 0, 0, 0
         for k in range(len(predictions)):
-            loss_scale, value, reward, policy_logits = predictions[k]
+            loss_scale, value_logits, reward_logits, policy_logits = predictions[k]
 
             value_loss_k, reward_loss_k, policy_loss_k = self.loss(
-                value, reward, policy_logits, value_target_batch[:, k],
+                value_logits, reward_logits, policy_logits, value_target_batch[:, k],
                 reward_target_batch[:, k], policy_target_batch[:, k]
             )
             scale_gradient(value_loss_k, loss_scale)
@@ -111,23 +113,23 @@ class Trainer:
             reward_loss += reward_loss_k
             policy_loss += policy_loss_k
 
-        loss = (value_loss * self.config.value_loss_weight + reward_loss + policy_loss).mean()
+        loss = (value_loss * self.config.value_loss_weight + reward_loss + policy_loss) / 3
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
         self.training_step += 1
 
-        return loss.item(), value_loss.mean().item(), reward_loss.mean().item(), policy_loss.mean().item()
+        return loss.item(), value_loss.item(), reward_loss.item(), policy_loss.item()
 
     def loss(self,
-             value: torch.Tensor,
-             reward: torch.Tensor,
+             value_logits: torch.Tensor,
+             reward_logits: torch.Tensor,
              policy_logits: torch.Tensor,
              value_target: torch.Tensor,
              reward_target: torch.Tensor,
              policy_target: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         f = nn.CrossEntropyLoss()
-        value_loss = f(value, value_target)
-        reward_loss = f(reward, reward_target)
+        value_loss = f(value_logits, value_target)
+        reward_loss = f(reward_logits, reward_target)
         policy_loss = f(policy_logits, policy_target)
         return value_loss, reward_loss, policy_loss

@@ -35,21 +35,22 @@ def inv_atari_scalar_transform(x: torch.Tensor, var_eps: float=0.001) -> torch.T
                 + 1 + var_eps)) - 1) / (2 * var_eps)) ** 2 - 1)
 
 
-def support_to_scalar(probabilities: torch.Tensor,
+def support_to_scalar(logits: torch.Tensor,
                       support_limit: int,
                       inv_scalar_transformer: Callable=inv_atari_scalar_transform,
                       **kwargs) -> torch.Tensor:
     """
     Re-convert categorical representation of scalars with integer support [-support_limit, support_limit] back to scalars
 
-    :param probabilities: Tensor represents categorical distributions
+    :param logits: Tensor represents categorical distributions
     :param support_limit: Number of categories indicating range symmetric around 0
     :param inv_scalar_transformer: Inverse of the function that scaled scalars before converting to distributions
     :param kwargs: Keyword arguments for inv_scalar_transformer
     """
+    probabilities = torch.softmax(logits, dim=1)
     support = torch.arange(-support_limit, support_limit + 1)
     x = np.dot(probabilities.detach().cpu(), support)
-    x = inv_scalar_transformer(torch.as_tensor(x, device=probabilities.device), **kwargs)
+    x = inv_scalar_transformer(torch.as_tensor(x, device=logits.device), **kwargs)
     return x
 
 
@@ -67,12 +68,23 @@ def scalar_to_support(x: torch.Tensor,
     """
     x = scalar_transformer(x, **kwargs)
     x = torch.clamp(x, min=-support_limit, max=support_limit)
-    floor = x.floor().int()
-    prob = x - floor
-    probabilities = torch.zeros((x.shape[0], x.shape[1], support_limit * 2 + 1), device=x.device)
-    probabilities[:, :, floor + support_limit] = 1 - prob
-    probabilities[:, :, floor + support_limit + 1] = prob
-    return probabilities
+    floor = x.floor().int()     # lower-bound integer support
+    prob = x - floor            # proportion between adjacent 2 integer supports
+    lower_indices = floor + support_limit   # lower-bound support index list
+    upper_indices = lower_indices + 1       # upper-bound support index list
+    # probabilities = torch.zeros((x.shape[0], x.shape[1], support_limit * 2 + 1), device=x.device)
+    # probabilities[:, :, floor + support_limit] = 1 - prob
+    # probabilities[:, :, floor + support_limit + 1] = prob
+    # return probabilities
+    logits = torch.zeros(x.shape[0], x.shape[1], 2 * support_limit + 1, device=x.device)
+    logits.scatter_(
+        2, (floor + support_limit).long().unsqueeze(-1), (1 - prob).unsqueeze(-1)
+    )
+    indexes = floor + support_limit + 1
+    prob = prob.masked_fill_(2 * support_limit < indexes, 0.0)
+    indexes = indexes.masked_fill_(2 * support_limit < indexes, 0.0)
+    logits.scatter_(2, indexes.long().unsqueeze(-1), prob.unsqueeze(-1))
+    return logits
 
 
 def normalize_hidden_state(hidden_states: torch.Tensor) -> torch.Tensor:
@@ -106,6 +118,8 @@ def update_lr(lr_init: float,
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+def ftensor(x: np.ndarray, device=None):
+    return torch.as_tensor(x, dtype=torch.float32, device=device)
 
 def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     cpu_dict = {}
@@ -117,3 +131,7 @@ def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         else:
             cpu_dict[key] = value
     return cpu_dict
+
+
+if __name__ == '__main__':
+    print(scalar_to_support(torch.tensor([3.7, 5.8]).unsqueeze(0), 5))
