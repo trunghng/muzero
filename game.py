@@ -75,7 +75,7 @@ class GameHistory:
         self.actions = []                   # a_{t+1}: Action leading from s_t -> s_{t+1}
         self.encoded_actions = []
         self.rewards = []                   # u_{t+1}: Observed reward after performing a_{t+1}
-        self.to_plays = []                  # p_t: Current player
+        self.to_plays = []                  # p_t: Player to play
         self.action_probabilities = []      # pi_t: Action probabilities produced by MCTS
         self.root_values = []               # v_t: MCTS value estimation
         self.reanalysed_root_values = []

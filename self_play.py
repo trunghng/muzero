@@ -93,21 +93,25 @@ class SelfPlay:
 
         with torch.no_grad():
             while True:
-                if opponent == 'self' or muzero_player == self.game.to_play:
+                to_play = self.game.to_play
+                if opponent == 'self' or muzero_player == to_play:
                     stacked_observations = game_history.stack_n_observations(
                         -1, self.config.stacked_observations, self.config.action_space_size, self.config.stack_action
                     )
                     root = self.mcts.search(self.network, stacked_observations, self.game.legal_actions(),
-                                            game_history.actions, self.game.action_encoder, self.game.to_play)
+                                            game_history.actions, self.game.action_encoder, to_play)
                     action = self.mcts.select_action(root, temperature)
                     action_probs = self.mcts.action_probabilities(root)
+                    root_value = root.value()
                 elif opponent == 'human':
                     action = HumanPlayer().play(self.game)
+                    root_value, action_probs = None, None
                 else:
                     action = RandomPlayer().play(self.game)
+                    root_value, action_probs = None, None
 
                 next_observation, reward, terminated = self.game.step(action)
-                game_history.save(observation, action, reward, self.game.to_play, action_probs, root.value())
+                game_history.save(observation, action, reward, to_play, action_probs, root_value)
                 observation = next_observation
                 if render:
                     self.game.render()

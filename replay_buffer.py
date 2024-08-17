@@ -13,16 +13,22 @@ from utils import set_seed
 @ray.remote
 class ReplayBuffer:
 
-    def __init__(self, initial_checkpoint: Dict[str, Any], config) -> None:
+    def __init__(self,
+                 initial_checkpoint: Dict[str, Any],
+                 initial_buffer: List[GameHistory],
+                 config) -> None:
         set_seed(config.seed)
         self.config = config
         self.size = config.buffer_size
-        self.memory = []
+        self.memory = initial_buffer
         self.played_games = initial_checkpoint['played_games']
         self.played_steps = initial_checkpoint['played_steps']
 
     def len(self) -> int:
         return len(self.memory)
+
+    def get_buffer(self) -> List[GameHistory]:
+        return self.memory
 
     def add(self, game_history: GameHistory, shared_storage: SharedStorage) -> None:
         """Store history of a new game into the buffer"""

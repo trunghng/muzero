@@ -1,6 +1,7 @@
 from copy import deepcopy
 import math
-import os
+import os.path as osp
+import pickle
 import time
 
 import numpy as np
@@ -41,9 +42,12 @@ class MuZero:
             'played_steps': 0,              # Number of steps played
             'reanalysed_games': 0           # Number of reanalysed games played
         }
-
+        self.replay_buffer = []
         self.logger = Logger(self.config.exp_name)
         self.logger.save_config(vars(deepcopy(self.config)))
+
+        if config.log_dir:
+            self.load_model()
 
     def train(self) -> None:
         n_gpus = 0 if self.config.device == 'cpu' else torch.cuda.device_count()
@@ -58,14 +62,14 @@ class MuZero:
             ) for i in range(self.config.workers)
         ]
 
-        replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.config)
+        replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.replay_buffer, self.config)
         shared_storage_worker = SharedStorage.remote(self.checkpoint)
         reanalyse_worker = Reanalyser.remote(self.checkpoint, self.config)
         test_worker = SelfPlay.remote(
             deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * self.config.workers
         )
 
-        print('Training...')
+        print('\nTraining...')
         for self_play_worker in self_play_workers:
             self_play_worker.play_continuously.remote(
                 shared_storage_worker, replay_buffer_worker
@@ -74,17 +78,17 @@ class MuZero:
             shared_storage_worker, replay_buffer_worker
         )
         reanalyse_worker.reanalyse.remote(shared_storage_worker, replay_buffer_worker)
-        self.logger.log_continuously(self.config, test_worker, shared_storage_worker)
+        self.logger.log_continuously(self.config, test_worker, shared_storage_worker, replay_buffer_worker)
 
     def test(self) -> None:
-        checkpoint = torch.load(os.path.join(self.config.log_dir, 'model.checkpoint'))
         self_play_workers = [
-            SelfPlay.remote(deepcopy(self.game), checkpoint, self.config, self.config.seed + 10 * i)
+            SelfPlay.remote(deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i)
             for i in range(self.config.workers)
         ]
 
         histories = []
-        print('Testing...')
+
+        print('\nTesting...')
         for _ in range(math.ceil(self.config.tests / self.config.workers)):
             histories += [
                 worker.play.remote(
@@ -104,12 +108,27 @@ class MuZero:
         else:
             p1_wr = np.mean([
                 sum(reward for i, reward in enumerate(history.rewards)
-                if history.to_plays[i - 1] == -1) for history in histories
+                if history.to_plays[i] == -1) for history in histories
             ])
             p2_wr = np.mean([
                 sum(reward for i, reward in enumerate(history.rewards)
-                if history.to_plays[i - 1] == 1) for history in histories
+                if history.to_plays[i] == 1) for history in histories
             ])
             time.sleep(1)
             print(f'P1 win rate: {p1_wr * 100:.2f}%\nP2 win rate: {p2_wr * 100:.2f}%\
                 \nDraw: {(1 - p1_wr - p2_wr) * 100:.2f}%')
+
+    def load_model(self):
+        checkpoint_path = osp.join(self.config.log_dir, 'model.checkpoint')
+        self.checkpoint = torch.load(checkpoint_path)
+        print(f'\nLoading model checkpoint from {checkpoint_path}')
+
+        if self.config.mode == 'train':
+            replay_buffer_path = osp.join(self.config.log_dir, 'replay_buffer.pkl')
+            with open(replay_buffer_path, 'rb') as f:
+                replay_buffer = pickle.load(f)
+            self.replay_buffer = replay_buffer['buffer']
+            self.checkpoint['played_steps'] = replay_buffer['played_steps']
+            self.checkpoint['played_games'] = replay_buffer['played_games']
+            self.checkpoint['reanalysed_games'] = replay_buffer['reanalysed_games']
+            print(f'Loading replay buffer from {replay_buffer_path}')

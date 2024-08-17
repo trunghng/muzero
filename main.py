@@ -1,7 +1,9 @@
 import argparse
 from argparse import RawTextHelpFormatter
 import json
-import os
+import os.path as osp
+import sys
+from types import SimpleNamespace
 
 import torch
 
@@ -61,6 +63,8 @@ if __name__ == '__main__':
 					   help="MuZero's turn order in test, or in evaluation during train:\n"
 					   '   1. -1: plays first or MuZero is the only player (self-play or 1p games)\n'
 					   '   2. 1: plays second')
+		p.add_argument('--log-dir', type=str,
+					   help='Path to the log directory, which stores model file, config file, etc')
 
 	train_parser.add_argument('--gpu', action='store_true',
 							  help='Whether to enable GPU (if available)')
@@ -106,7 +110,7 @@ if __name__ == '__main__':
 							  help='Momentum factor, exclusively used for SGD optimizer')
 	train_parser.add_argument('--weight-decay', type=float, default=1e-5,
 							  help='Weight decay')
-	train_parser.add_argument('--lr-decay-rate', type=float, default=1,
+	train_parser.add_argument('--lr-decay-rate', type=float, default=0.9,
 							  help='Decay rate, used for exponential learning rate schedule')
 	train_parser.add_argument('--lr-decay-steps', type=int, default=10000,
 							  help='Number of decay steps, used for exponential learning rate schedule')
@@ -119,25 +123,43 @@ if __name__ == '__main__':
 							 help='Number of games for testing')
 	test_parser.add_argument('--render', action='store_true',
 							 help='Whether to render each game during testing')
-	test_parser.add_argument('--log-dir', type=str,
-							 help='Path to the log directory, which stores model file, config file, etc')
-
 	args = parser.parse_args()
 
-	game = create_game(args)
-	args.players = game.players
-	args.observation_dim = game.observation_dim
-	args.action_space_size = game.action_space_size
-	args.stack_action = game.stack_action
-	args.visit_softmax_temperature_func = game.visit_softmax_temperature_func
-
 	if args.mode == 'train':
+		if args.log_dir is not None:
+			try:
+				with open(osp.join(args.log_dir, 'config.json')) as f:
+					config = json.load(f, object_hook=lambda d: SimpleNamespace(**d))
+				config.log_dir = args.log_dir
+				args = config
+			except FileNotFoundError:
+				print('Log directory not found')
+
+		game = create_game(args)
+		args.players = game.players
+		args.observation_dim = game.observation_dim
+		args.action_space_size = game.action_space_size
+		args.stack_action = game.stack_action
+		args.visit_softmax_temperature_func = game.visit_softmax_temperature_func
 		args.device = 'cuda:0' if torch.cuda.is_available() and args.gpu else 'cpu'
 		muzero = MuZero(game, args)
 		muzero.train()
 	else:
-		with open(os.path.join(args.log_dir, 'config.json')) as f:
-			config = json.load(f)
+		try:
+			with open(osp.join(args.log_dir, 'config.json')) as f:
+				config = json.load(f)
+		except TypeError:
+			print('--log-dir tag must be defined')
+			sys.exit(0)
+		except FileNotFoundError:
+			print('Log directory not found')
+			sys.exit(0)
+
+		game = create_game(args)
+		args.players = game.players
+		args.observation_dim = game.observation_dim
+		args.action_space_size = game.action_space_size
+		args.stack_action = game.stack_action
 		args.stacked_observations = config['stacked_observations']
 		args.blocks = config['blocks']
 		args.channels = config['channels']

@@ -3,12 +3,14 @@ from datetime import datetime as dt
 import json
 import os
 import os.path as osp
+import pickle
 from typing import Any, Dict, List
 
 import matplotlib.pyplot as plt
 import ray
 import torch
 
+from replay_buffer import ReplayBuffer
 from self_play import SelfPlay
 from shared_storage import SharedStorage
 
@@ -23,7 +25,8 @@ class Logger:
         self.losses = defaultdict(list)
 
     def save_config(self, config: Dict) -> None:
-        del config['visit_softmax_temperature_func']
+        if 'visit_softmax_temperature_func' in config:
+            del config['visit_softmax_temperature_func']
         output = json.dumps(config, separators=(',', ':\t'), indent=4)
         print('Experiment config:\n', output)
         with open(osp.join(self.log_dir, 'config.json'), 'w') as f:
@@ -32,10 +35,22 @@ class Logger:
     def save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         torch.save(checkpoint, osp.join(self.log_dir, 'model.checkpoint'))
 
+    def save_replay_buffer(self, replay_buffer: ReplayBuffer, checkpoint: Dict[str, Any]) -> None:
+        replay_buffer_path = osp.join(self.log_dir, 'replay_buffer.pkl')
+        print(f'Saving replay buffer at {replay_buffer_path}')
+        pickle.dump({
+            'buffer': replay_buffer,
+            'played_games': checkpoint['played_games'],
+            'played_steps': checkpoint['played_steps'],
+            'reanalysed_games': checkpoint['reanalysed_games']
+        }, open(replay_buffer_path, 'wb')
+    )
+
     def log_continuously(self,
                          config,
                          test_worker: SelfPlay,
-                         shared_storage_worker: SharedStorage) -> None:
+                         shared_storage_worker: SharedStorage,
+                         replay_buffer_worker: ReplayBuffer) -> None:
         test_worker.play_continuously.remote(shared_storage_worker, None, test=True)
         keys = [
             'episode_length', 'episode_return', 'mean_value', 'training_step',
@@ -66,6 +81,10 @@ class Logger:
         except KeyboardInterrupt:
             pass
         self.dump_loss()
+        self.save_replay_buffer(
+            ray.get(replay_buffer_worker.get_buffer.remote()),
+            ray.get(shared_storage_worker.get_checkpoint.remote())
+        )
 
     def log_loss(self, losses: Dict[str, float]) -> None:
         for k, v in losses.items():
@@ -74,7 +93,7 @@ class Logger:
     def dump_loss(self) -> None:
         loss_txt = osp.join(self.log_dir, 'loss.txt')
         loss_plot = osp.join(self.log_dir, 'loss.png')
-        print(f'\n\nSaving loss history and its plot at {loss_txt} & {loss_plot}...')
+        print(f'\n\nSaving loss history at {loss_txt} and its plot at {loss_plot}...')
         with open(loss_txt, 'w') as f:
             f.write(','.join(list(self.losses.keys())) + '\n')
             for ls in zip(*self.losses.values()):
