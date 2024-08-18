@@ -78,7 +78,8 @@ class GameHistory:
         self.to_plays = []                  # p_t: Player to play
         self.action_probabilities = []      # pi_t: Action probabilities produced by MCTS
         self.root_values = []               # v_t: MCTS value estimation
-        self.reanalysed_root_values = []
+        self.reanalysed_action_probabilities = None
+        self.reanalysed_root_values = None
         self.action_encoder = game.action_encoder
         self.initial_observation = game.observation()
 
@@ -99,6 +100,12 @@ class GameHistory:
         self.to_plays.append(to_play)
         self.action_probabilities.append(pi)
         self.root_values.append(root_value)
+
+    def save_reanalysed_stats(self,
+                              action_probabilities: List[List[float]],
+                              root_values: List[float]) -> None:
+        self.reanalysed_action_probabilities = action_probabilities
+        self.reanalysed_root_values = root_values
 
     def stack_n_observations(self,
                              t: int,
@@ -197,13 +204,16 @@ class GameHistory:
             if gamma == 1:
                 rewards = []
                 for i in range(step, len(self)):
-                    rewards.append(self.rewards[i] if self.to_plays[i] == self.to_plays[step] else -self.rewards[i])
+                    rewards.append(
+                        self.rewards[i] if self.to_plays[i] == self.to_plays[step] else -self.rewards[i]
+                    )
                 value = sum(rewards)
             else:
                 bootstrap_step = step + td_steps
+                root_values = self.reanalysed_root_values if self.reanalysed_root_values else self.root_values
                 if bootstrap_step < len(self):
-                    bootstrap = self.root_values[bootstrap_step] if self.to_plays[bootstrap_step] == self.to_plays[step]\
-                                    else -self.root_values[bootstrap_step]
+                    bootstrap = root_values[bootstrap_step] if self.to_plays[bootstrap_step] == self.to_plays[step]\
+                                    else -root_values[bootstrap_step]
                     bootstrap *= gamma ** td_steps
                 else:
                     bootstrap = 0
@@ -221,7 +231,10 @@ class GameHistory:
             if step < len(self):
                 value_targets.append(value)
                 reward_targets.append(self.rewards[step])
-                policy_targets.append(self.action_probabilities[step])
+                policy_targets.append(
+                    self.reanalysed_action_probabilities[step] if self.reanalysed_action_probabilities
+                    else self.action_probabilities[step]
+                )
             else:
                 value_targets.append(0)
                 reward_targets.append(0)

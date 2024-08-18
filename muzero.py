@@ -55,18 +55,25 @@ class MuZero:
         training_worker = Trainer.options(
             num_cpus=n_cpus, num_gpus=n_gpus
         ).remote(self.checkpoint, self.config)
-
         self_play_workers = [
             SelfPlay.remote(
-                deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i
+                deepcopy(self.game), self.checkpoint, self.config,
+                self.config.seed + 10 * i
             ) for i in range(self.config.workers)
         ]
-
-        replay_buffer_worker = ReplayBuffer.remote(self.checkpoint, self.replay_buffer, self.config)
+        replay_buffer_worker = ReplayBuffer.remote(
+            self.checkpoint, self.replay_buffer, self.config
+        )
         shared_storage_worker = SharedStorage.remote(self.checkpoint)
-        reanalyse_worker = Reanalyser.remote(self.checkpoint, self.config)
+        reanalyse_workers = [
+            Reanalyser.remote(
+                deepcopy(self.game), self.checkpoint, self.config,
+                self.config.seed + 10 * i
+            ) for i in range(self.config.reanalyse_workers)
+        ]
         test_worker = SelfPlay.remote(
-            deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * self.config.workers
+            deepcopy(self.game), self.checkpoint, self.config,
+            self.config.seed + self.config.workers
         )
 
         print('\nTraining...')
@@ -77,13 +84,19 @@ class MuZero:
         training_worker.update_weights_continuously.remote(
             shared_storage_worker, replay_buffer_worker
         )
-        reanalyse_worker.reanalyse.remote(shared_storage_worker, replay_buffer_worker)
-        self.logger.log_continuously(self.config, test_worker, shared_storage_worker, replay_buffer_worker)
+        for reanalyse_worker in reanalyse_workers:
+            reanalyse_worker.reanalyse.remote(
+                shared_storage_worker, replay_buffer_worker
+            )
+        self.logger.log_continuously(
+            self.config, test_worker, shared_storage_worker, replay_buffer_worker
+        )
 
     def test(self) -> None:
         self_play_workers = [
-            SelfPlay.remote(deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i)
-            for i in range(self.config.workers)
+            SelfPlay.remote(
+                deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i
+            ) for i in range(self.config.workers)
         ]
 
         histories = []

@@ -97,7 +97,8 @@ if __name__ == '__main__':
 	train_parser.add_argument('--buffer-size', type=int, default=3000,
 							  help='Maximum number of self-play games to save in the replay buffer')
 	train_parser.add_argument('--td-steps', type=int, default=9,
-							  help='Number of steps in the future to take into account for calculating the target value')
+							  help='Number of steps in the future to take into account for '
+							  'calculating the target value')
 	train_parser.add_argument('--unroll-steps', type=int, default=5,
 							  help='Number of unroll steps')
 	train_parser.add_argument('--training-steps', type=int, default=100000,
@@ -118,6 +119,14 @@ if __name__ == '__main__':
 							  help='Support limit')
 	train_parser.add_argument('--value-loss-weight', type=float, default=0.25,
 							  help='Weight of value loss in total loss function')
+	train_parser.add_argument('--reanalyse-workers', type=int, default=1,
+							  help='Number of reanalyse workers')
+	train_parser.add_argument('--target-network-update-freq', type=int, default=1,
+							  help='Target network update frequency, used in Reanalyse to provide a '
+							  'fresher, stable target for the value function')
+	train_parser.add_argument('--mcts-target-value', action='store_true',
+							  help='Whether to use value function obtained from re-executing MCTS in '
+							  'Reanalyse as target for training')
 
 	test_parser.add_argument('--tests', type=int, default=100,
 							 help='Number of games for testing')

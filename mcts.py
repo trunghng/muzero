@@ -8,7 +8,7 @@ import torch
 
 from game import ActType, PlayerType
 from network import MuZeroNetwork
-from network_utils import ftensor
+from utils import ftensor
 
 
 class Node:

@@ -118,8 +118,6 @@ def update_lr(lr_init: float,
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-def ftensor(x: np.ndarray, device=None):
-    return torch.as_tensor(x, dtype=torch.float32, device=device)
 
 def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     cpu_dict = {}
@@ -131,7 +129,3 @@ def dict_to_cpu(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         else:
             cpu_dict[key] = value
     return cpu_dict
-
-
-if __name__ == '__main__':
-    print(scalar_to_support(torch.tensor([3.7, 5.8]).unsqueeze(0), 5))

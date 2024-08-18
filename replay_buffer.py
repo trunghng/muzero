@@ -5,9 +5,8 @@ import ray
 import torch
 
 from game import GameHistory
-from network_utils import ftensor
 from shared_storage import SharedStorage
-from utils import set_seed
+from utils import ftensor, set_seed
 
 
 @ray.remote
@@ -23,6 +22,7 @@ class ReplayBuffer:
         self.memory = initial_buffer
         self.played_games = initial_checkpoint['played_games']
         self.played_steps = initial_checkpoint['played_steps']
+        self.reanalysed_games = initial_checkpoint['reanalysed_games']
 
     def len(self) -> int:
         return len(self.memory)
@@ -32,9 +32,9 @@ class ReplayBuffer:
 
     def add(self, game_history: GameHistory, shared_storage: SharedStorage) -> None:
         """Store history of a new game into the buffer"""
+        # Remove the oldest game from the buffer if the max size is reached
         if len(self.memory) == self.size:
-            removed_idx = np.random.randint(len(self.memory))
-            self.memory.pop(removed_idx)
+            self.memory.pop(0)
         self.memory.append(game_history)
         self.played_games += 1
         self.played_steps += len(game_history)
@@ -51,8 +51,10 @@ class ReplayBuffer:
             return selected_indices[0], game_histories[0]
         return selected_indices, game_histories
 
-    def update_game(self, idx: int, game_history: GameHistory) -> None:
+    def update_game(self, idx: int, game_history: GameHistory, shared_storage: SharedStorage) -> None:
         self.memory[idx] = game_history
+        self.reanalysed_games += 1
+        shared_storage.set_info.remote({'reanalysed_games': self.reanalysed_games})
 
     def sample(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -69,18 +71,28 @@ class ReplayBuffer:
             t = np.random.randint(len(game_history))
 
             observations = game_history.stack_n_observations(
-                t, self.config.stacked_observations, self.config.action_space_size, self.config.stack_action
+                t,
+                self.config.stacked_observations,
+                self.config.action_space_size,
+                self.config.stack_action
             )
 
             encoded_actions = game_history.encoded_actions[t:t + self.config.unroll_steps + 1]
             if len(encoded_actions) < self.config.unroll_steps + 1:
                 absorbed_indices = np.random.choice(
-                    range(len(game_history.encoded_actions)), size=self.config.unroll_steps + 1 - len(encoded_actions)
+                    range(len(game_history.encoded_actions)),
+                    size=self.config.unroll_steps + 1 - len(encoded_actions)
                 )
-                encoded_actions.extend([game_history.encoded_actions[i] for i in absorbed_indices])
+                encoded_actions.extend(
+                    [game_history.encoded_actions[i] for i in absorbed_indices]
+                )
 
             value_targets, reward_targets, policy_targets = game_history.make_target(
-                t, self.config.td_steps, self.config.gamma, self.config.unroll_steps, self.config.action_space_size
+                t,
+                self.config.td_steps,
+                self.config.gamma,
+                self.config.unroll_steps,
+                self.config.action_space_size
             )
             batch[0].append(observations)
             batch[1].append(encoded_actions)
