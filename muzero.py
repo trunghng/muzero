@@ -8,14 +8,14 @@ import numpy as np
 import ray
 import torch
 
-from game import Game
+from games.game import Game
 from logger import Logger
 from reanalyse import Reanalyser
 from replay_buffer import ReplayBuffer
 from self_play import SelfPlay
 from shared_storage import SharedStorage
 from trainer import Trainer
-from utils import set_seed
+from utils.utils import set_seed
 
 
 class MuZero:
@@ -46,7 +46,7 @@ class MuZero:
         self.logger = Logger(self.config.exp_name)
         self.logger.save_config(vars(deepcopy(self.config)))
 
-        if config.log_dir:
+        if config.logdir:
             self.load_model()
 
     def train(self) -> None:
@@ -73,7 +73,7 @@ class MuZero:
         ]
         test_worker = SelfPlay.remote(
             deepcopy(self.game), self.checkpoint, self.config,
-            self.config.seed + self.config.workers
+            self.config.seed + 10 * self.config.workers
         )
 
         print('\nTraining...')
@@ -132,12 +132,12 @@ class MuZero:
                 \nDraw: {(1 - p1_wr - p2_wr) * 100:.2f}%')
 
     def load_model(self):
-        checkpoint_path = osp.join(self.config.log_dir, 'model.checkpoint')
+        checkpoint_path = osp.join(self.config.logdir, 'model.checkpoint')
         self.checkpoint = torch.load(checkpoint_path)
         print(f'\nLoading model checkpoint from {checkpoint_path}')
 
         if self.config.mode == 'train':
-            replay_buffer_path = osp.join(self.config.log_dir, 'replay_buffer.pkl')
+            replay_buffer_path = osp.join(self.config.logdir, 'replay_buffer.pkl')
             with open(replay_buffer_path, 'rb') as f:
                 replay_buffer = pickle.load(f)
             self.replay_buffer = replay_buffer['buffer']

@@ -3,12 +3,12 @@ from typing import Any, Dict
 
 import ray
 
-from game import Game
+from games.game import Game
 from mcts import MCTS
 from network import MuZeroNetwork
 from replay_buffer import ReplayBuffer
 from shared_storage import SharedStorage
-from utils import ftensor, set_seed
+from utils.utils import ftensor, set_seed
 
 
 @ray.remote

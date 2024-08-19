@@ -7,10 +7,10 @@ import torch.nn as nn
 from torch.optim import Adam, SGD
 
 from network import MuZeroNetwork
-from network_utils import scalar_to_support, scale_gradient, update_lr, dict_to_cpu
 from replay_buffer import ReplayBuffer
 from shared_storage import SharedStorage
-from utils import set_seed
+from utils.network_utils import scalar_to_support, scale_gradient, update_lr, dict_to_cpu
+from utils.utils import set_seed
 
 
 @ray.remote

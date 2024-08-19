@@ -4,7 +4,7 @@ from typing import Tuple, List, Any
 import torch
 import torch.nn as nn
 
-from network_utils import mlp, conv3x3, support_to_scalar, normalize_hidden_state
+from utils.network_utils import mlp, conv3x3, support_to_scalar, normalize_hidden_state
 
 
 class ConvBlock(nn.Module):

@@ -6,9 +6,9 @@ from copy import deepcopy
 import numpy as np
 import torch
 
-from game import ActType, PlayerType
+from games.game import ActType, PlayerType
 from network import MuZeroNetwork
-from utils import ftensor
+from utils.utils import ftensor
 
 
 class Node:

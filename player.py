@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 import random
 
-from game import Game, ActType
-from game_utils import cellstr_to_idx
+from games.game import Game, BoardGame, ActType
+from utils.game_utils import action_to_cellstr, cellstr_to_action
 
 
 class Player(ABC):
@@ -28,11 +28,11 @@ class HumanPlayer(Player):
         action = None
         while action not in game.legal_actions():
             actions = game.legal_actions()
-            if game.type == 'board_game':
+            if isinstance(game, BoardGame):
                 actions = list(map(lambda a: ''.join(
-                    idx_to_cellstr(a, game.size)), game.legal_actions()))
+                    action_to_cellstr(a, game.size)), game.legal_actions()))
                 action_str = input(f'Legal moves are {actions}, choose one: ')
-                action = cellstr_to_idx(action_str, game.size)
+                action = cellstr_to_action(action_str, game.size)
             else:
                 action_str = input(f'Legal moves are {actions}, choose one: ')
                 action = int(action_str)

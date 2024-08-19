@@ -4,9 +4,9 @@ import numpy as np
 import ray
 import torch
 
-from game import GameHistory
+from games.game import GameHistory
 from shared_storage import SharedStorage
-from utils import ftensor, set_seed
+from utils.utils import ftensor, set_seed
 
 
 @ray.remote

@@ -4,13 +4,13 @@ import numpy as np
 import ray
 import torch
 
-from game import Game, GameHistory
+from games.game import Game, GameHistory
 from mcts import MCTS
 from player import HumanPlayer, RandomPlayer
 from network import MuZeroNetwork
 from replay_buffer import ReplayBuffer
 from shared_storage import SharedStorage
-from utils import set_seed
+from utils.utils import set_seed
 
 
 @ray.remote
@@ -87,7 +87,7 @@ class SelfPlay:
         :param render: Whether to render the game
         """
         observation = self.game.reset()
-        game_history = GameHistory(self.game)
+        game_history = GameHistory(self.game, observation)
         if render:
             self.game.render()
 

@@ -7,7 +7,9 @@ from types import SimpleNamespace
 
 import torch
 
-from game import Game, TicTacToe
+from games.game import Game
+from games.tictactoe import TicTacToe
+from games.cartpole import CartPole
 from muzero import MuZero
 
 
@@ -15,7 +17,10 @@ def create_game(args) -> Game:
 	if args.game == 'tictactoe':
 		return TicTacToe(args.size)
 	elif args.game == 'cartpole':
-		pass
+		if args.render is not None:
+			return CartPole(args.render)
+		else:
+			return CartPole()
 	else:
 		pass
 
@@ -63,7 +68,7 @@ if __name__ == '__main__':
 					   help="MuZero's turn order in test, or in evaluation during train:\n"
 					   '   1. -1: plays first or MuZero is the only player (self-play or 1p games)\n'
 					   '   2. 1: plays second')
-		p.add_argument('--log-dir', type=str,
+		p.add_argument('--logdir', type=str,
 					   help='Path to the log directory, which stores model file, config file, etc')
 
 	train_parser.add_argument('--gpu', action='store_true',
@@ -135,11 +140,11 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	if args.mode == 'train':
-		if args.log_dir is not None:
+		if args.logdir is not None:
 			try:
-				with open(osp.join(args.log_dir, 'config.json')) as f:
+				with open(osp.join(args.logdir, 'config.json')) as f:
 					config = json.load(f, object_hook=lambda d: SimpleNamespace(**d))
-				config.log_dir = args.log_dir
+				config.logdir = args.logdir
 				args = config
 			except FileNotFoundError:
 				print('Log directory not found')
@@ -155,10 +160,10 @@ if __name__ == '__main__':
 		muzero.train()
 	else:
 		try:
-			with open(osp.join(args.log_dir, 'config.json')) as f:
+			with open(osp.join(args.logdir, 'config.json')) as f:
 				config = json.load(f)
 		except TypeError:
-			print('--log-dir tag must be defined')
+			print('--logdir tag must be defined')
 			sys.exit(0)
 		except FileNotFoundError:
 			print('Log directory not found')
