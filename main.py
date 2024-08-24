@@ -153,7 +153,6 @@ if __name__ == '__main__':
 		args.players = game.players
 		args.observation_dim = game.observation_dim
 		args.action_space_size = game.action_space_size
-		args.stack_action = game.stack_action
 		args.visit_softmax_temperature_func = game.visit_softmax_temperature_func
 		args.device = 'cuda:0' if torch.cuda.is_available() and args.gpu else 'cpu'
 		muzero = MuZero(game, args)
@@ -173,7 +172,6 @@ if __name__ == '__main__':
 		args.players = game.players
 		args.observation_dim = game.observation_dim
 		args.action_space_size = game.action_space_size
-		args.stack_action = game.stack_action
 		args.stacked_observations = config['stacked_observations']
 		args.blocks = config['blocks']
 		args.channels = config['channels']
@@ -185,6 +183,7 @@ if __name__ == '__main__':
 		args.fc_value_layers = config['fc_value_layers']
 		args.downsample = config['downsample']
 		args.support_limit = config['support_limit']
+		args.stack_action = config['stack_action']
 
 		agent = MuZero(game, args)
 		agent.test()

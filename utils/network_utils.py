@@ -26,6 +26,48 @@ def conv3x3(in_channels: int, out_channels: int, stride: int=1) -> nn.Conv2d:
     return nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
 
 
+class ConvBlock(nn.Module):
+    """Convolutional block"""
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 stride: int=1) -> None:
+        super().__init__()
+        self.network = nn.Sequential(
+            conv3x3(in_channels, out_channels, stride=stride),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU()
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.network(x)
+
+
+class ResidualBlock(nn.Module):
+    """Residual block"""
+
+    def __init__(self,
+                 channels: int,
+                 stride: int=1) -> None:
+        super().__init__()
+        self.conv1 = conv3x3(channels, channels, stride)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.conv2 = conv3x3(channels, channels)
+        self.bn2 = nn.BatchNorm2d(channels)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += x
+        out = self.relu(out)
+        return out
+
+
 def atari_scalar_transform(x: torch.Tensor, var_eps: float=0.001) -> torch.Tensor:
     return torch.sign(x) * (torch.sqrt(torch.abs(x) + 1) - 1) + var_eps * x
 

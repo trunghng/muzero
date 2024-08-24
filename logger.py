@@ -7,10 +7,12 @@ import time
 from typing import Any, Dict, List
 
 import matplotlib.pyplot as plt
+import numpy as np
 import ray
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+from games.game import GameHistory
 from replay_buffer import ReplayBuffer
 from self_play import SelfPlay
 from shared_storage import SharedStorage
@@ -104,9 +106,9 @@ class Logger:
                 )
                 writer.add_scalar('2.Workers/6.Learning_rate', info['lr'], counter)
                 writer.add_scalar('3.Loss/1.Total_weighted_loss', info['loss'], info['training_step'])
-                writer.add_scalar('3.Loss/Value_loss', info['value_loss'], info['training_step'])
-                writer.add_scalar('3.Loss/Reward_loss', info['reward_loss'], info['training_step'])
-                writer.add_scalar('3.Loss/Policy_loss', info['policy_loss'], info['training_step'])
+                writer.add_scalar('3.Loss/2.Value_loss', info['value_loss'], info['training_step'])
+                writer.add_scalar('3.Loss/3.Reward_loss', info['reward_loss'], info['training_step'])
+                writer.add_scalar('3.Loss/4.Policy_loss', info['policy_loss'], info['training_step'])
                 print(f'\rEpisode return: {info["episode_return"]:.2f}. '
                       + f'Training step: {info["training_step"]}/{config.training_steps}. '
                       + f'Played games: {info["played_games"]}. '
@@ -128,6 +130,23 @@ class Logger:
             ray.get(shared_storage_worker.get_checkpoint.remote())
         )
 
-    def log_reward(self, rewards: List[float]) -> None:
+    def log_result(self, config, histories: List[GameHistory]) -> None:
         with open(osp.join(self.logdir, 'rewards.txt'), 'w') as f:
-            f.write(','.join(map(str, rewards)) + '\n')
+            for history in histories:
+                f.write(','.join(map(str, history.rewards)) + '\n')
+
+        if config.players == 1:
+            result = np.mean([sum(history.rewards) for history in histories])
+            print('Result:', result)
+        else:
+            p1_wr = np.mean([
+                sum(reward for i, reward in enumerate(history.rewards)
+                if history.to_plays[i] == -1) for history in histories
+            ])
+            p2_wr = np.mean([
+                sum(reward for i, reward in enumerate(history.rewards)
+                if history.to_plays[i] == 1) for history in histories
+            ])
+            time.sleep(1)
+            print(f'P1 win rate: {p1_wr * 100:.2f}%\nP2 win rate: {p2_wr * 100:.2f}%\
+                \nDraw: {(1 - p1_wr - p2_wr) * 100:.2f}%')

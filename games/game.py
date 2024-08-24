@@ -17,12 +17,10 @@ class Game(ABC):
     def __init__(self,
                  players: int,
                  observation_dim: List[int],
-                 action_space_size: int,
-                 stack_action: bool) -> None:
+                 action_space_size: int) -> None:
         self.players = players
         self.observation_dim = observation_dim
         self.action_space_size = action_space_size
-        self.stack_action = stack_action
 
     @abstractmethod
     def reset(self) -> ObsType:
@@ -59,7 +57,7 @@ class BoardGame(Game):
     def __init__(self,
                  size: int,
                  observation_dim: List[int]) -> None:
-        super().__init__(2, observation_dim, size**2, False)
+        super().__init__(2, observation_dim, size**2)
         self.size = size
         self.board = np.zeros((size, size))     # -1, 1, 0 denote X, O, empty respectively
         self.to_play = -1                       # X moves first
@@ -178,13 +176,13 @@ class GameHistory:
         return eps_return
 
     def make_target(
-            self,
-            t: int,
-            td_steps: int,
-            gamma: float,
-            unroll_steps: int,
-            action_space_size: int
-        ) -> Tuple[List[float], List[float], List[List[float]]]:
+        self,
+        t: int,
+        td_steps: int,
+        gamma: float,
+        unroll_steps: int,
+        action_space_size: int
+    ) -> Tuple[List[float], List[float], List[List[float]]]:
         """
         Create targets for every unroll steps
 

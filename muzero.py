@@ -112,24 +112,7 @@ class MuZero:
                 ) for worker in self_play_workers
             ]
         histories = ray.get(histories)
-        for history in histories:
-            self.logger.log_reward(history.rewards)
-
-        if self.config.players == 1:
-            result = np.mean([sum(history.rewards) for history in histories])
-            print('Result:', result)
-        else:
-            p1_wr = np.mean([
-                sum(reward for i, reward in enumerate(history.rewards)
-                if history.to_plays[i] == -1) for history in histories
-            ])
-            p2_wr = np.mean([
-                sum(reward for i, reward in enumerate(history.rewards)
-                if history.to_plays[i] == 1) for history in histories
-            ])
-            time.sleep(1)
-            print(f'P1 win rate: {p1_wr * 100:.2f}%\nP2 win rate: {p2_wr * 100:.2f}%\
-                \nDraw: {(1 - p1_wr - p2_wr) * 100:.2f}%')
+        self.logger.log_result(self.config, histories)
 
     def load_model(self):
         checkpoint_path = osp.join(self.config.logdir, 'model.checkpoint')
