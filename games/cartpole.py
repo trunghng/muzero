@@ -1,7 +1,6 @@
 from typing import List, Tuple
 
 import gymnasium as gym
-from gymnasium.wrappers import RecordVideo
 import numpy as np
 
 from games.game import Game, ActType, ObsType
@@ -12,8 +11,7 @@ class CartPole(Game):
     def __init__(self, render: bool=False) -> None:
         super().__init__(1, [1, 1, 4], 2)
         if render:
-            env = gym.make('CartPole-v1', render_mode='rgb_array')
-            self.env = RecordVideo(env, disable_logger=True)
+            self.env = gym.make('CartPole-v1', render_mode='human')
         else:
             self.env = gym.make('CartPole-v1')
 

@@ -1,6 +1,6 @@
 {
     "game": "cartpole",
-    "workers":  2,
+    "workers":  4,
     "seed": 0,
     "max_moves":    500,
     "simulations":  50,

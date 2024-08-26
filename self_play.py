@@ -13,7 +13,6 @@ from shared_storage import SharedStorage
 from utils.utils import set_seed
 
 
-@ray.remote
 class SelfPlay:
 
     def __init__(self,
@@ -75,7 +74,7 @@ class SelfPlay:
         :param render: Whether to render the game
         """
         observation = self.game.reset()
-        game_history = GameHistory(self.game, observation)
+        game_history = GameHistory(self.game.action_encoder, observation)
         if render:
             self.game.render()
 

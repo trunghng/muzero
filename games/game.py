@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple, TypeVar
+from typing import List, Tuple, TypeVar, Callable
 
 import numpy as np
 
@@ -82,7 +82,7 @@ class GameHistory:
     the observation, we encode historical actions into the stacked observation.
     """
 
-    def __init__(self, game: Game, initial_observation: ObsType) -> None:
+    def __init__(self, action_encoder: Callable, initial_observation: ObsType) -> None:
         self.observations = []              # o_t: State observations
         self.actions = []                   # a_{t+1}: Action leading from s_t -> s_{t+1}
         self.encoded_actions = []
@@ -92,7 +92,7 @@ class GameHistory:
         self.root_values = []               # v_t: MCTS value estimation
         self.reanalysed_action_probabilities = None
         self.reanalysed_root_values = None
-        self.action_encoder = game.action_encoder
+        self.action_encoder = action_encoder
         self.initial_observation = initial_observation
 
     def __len__(self) -> int:

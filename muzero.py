@@ -56,7 +56,7 @@ class MuZero:
             num_cpus=n_cpus, num_gpus=n_gpus
         ).remote(self.checkpoint, self.config)
         self_play_workers = [
-            SelfPlay.remote(
+            ray.remote(SelfPlay).remote(
                 deepcopy(self.game), self.checkpoint, self.config,
                 self.config.seed + 10 * i
             ) for i in range(self.config.workers)
@@ -71,7 +71,7 @@ class MuZero:
                 self.config.seed + 10 * i
             ) for i in range(self.config.reanalyse_workers)
         ]
-        test_worker = SelfPlay.remote(
+        test_worker = ray.remote(SelfPlay).remote(
             deepcopy(self.game), self.checkpoint, self.config,
             self.config.seed + 10 * self.config.workers
         )
@@ -93,25 +93,37 @@ class MuZero:
         )
 
     def test(self) -> None:
-        self_play_workers = [
-            SelfPlay.remote(
-                deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i
-            ) for i in range(self.config.workers)
-        ]
-
-        histories = []
-
         print('\nTesting...')
-        for _ in range(math.ceil(self.config.tests / self.config.workers)):
-            histories += [
-                worker.play.remote(
+
+        if self.config.render:
+            self_play_worker = SelfPlay(deepcopy(self.game), self.checkpoint, self.config, self.config.seed)
+
+            histories = [
+                self_play_worker.play(
                     0,  # select actions with max #visits
                     self.config.opponent,
                     self.config.muzero_player,
                     self.config.render
-                ) for worker in self_play_workers
+                ) for _ in range(self.config.tests)
             ]
-        histories = ray.get(histories)
+        else:
+            self_play_workers = [
+                ray.remote(SelfPlay).remote(
+                    deepcopy(self.game), self.checkpoint, self.config, self.config.seed + 10 * i
+                ) for i in range(self.config.workers)
+            ]
+            histories = []
+
+            for _ in range(math.ceil(self.config.tests / self.config.workers)):
+                histories += [
+                    worker.play.remote(
+                        0,  # select actions with max #visits
+                        self.config.opponent,
+                        self.config.muzero_player,
+                        self.config.render
+                    ) for worker in self_play_workers
+                ]
+            histories = ray.get(histories)
         self.logger.log_result(self.config, histories)
 
     def load_model(self):
