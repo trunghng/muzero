@@ -19,19 +19,7 @@ class Trainer:
     def __init__(self, initial_checkpoint: Dict[str, Any], config) -> None:
         set_seed(config.seed)
         self.config = config
-        self.network = MuZeroNetwork(config.observation_dim,
-                                     config.action_space_size,
-                                     config.stacked_observations,
-                                     config.blocks,
-                                     config.channels,
-                                     config.reduced_channels_reward,
-                                     config.reduced_channels_policy,
-                                     config.reduced_channels_value,
-                                     config.fc_reward_layers,
-                                     config.fc_policy_layers,
-                                     config.fc_value_layers,
-                                     config.downsample,
-                                     config.support_limit).to(config.device)
+        self.network = MuZeroNetwork(config).to(config.device)
         self.network.set_weights(initial_checkpoint['model_state_dict'])
         self.network.train()
         if config.optimizer == 'Adam':
@@ -87,7 +75,7 @@ class Trainer:
 
         for k in range(1, action_batch.shape[1]):
             policy_logits, hidden_state, value_logits, reward_logits = self.network.recurrent_inference(
-                hidden_state, action_batch[:, k].unsqueeze(1), False
+                hidden_state, action_batch[:, k], False
             )
 
             # Scale the gradient at the start of dynamics function by 0.5

@@ -25,19 +25,7 @@ class SelfPlay:
         self.config = config
         self.game = game
         self.mcts = MCTS(self.config)
-        self.network = MuZeroNetwork(config.observation_dim,
-                                     config.action_space_size,
-                                     config.stacked_observations,
-                                     config.blocks,
-                                     config.channels,
-                                     config.reduced_channels_reward,
-                                     config.reduced_channels_policy,
-                                     config.reduced_channels_value,
-                                     config.fc_reward_layers,
-                                     config.fc_policy_layers,
-                                     config.fc_value_layers,
-                                     config.downsample,
-                                     config.support_limit)
+        self.network = MuZeroNetwork(config)
         self.network.set_weights(initial_checkpoint['model_state_dict'])
         self.network.eval()
 
@@ -82,7 +70,7 @@ class SelfPlay:
             2. 'human'  play with a human
             3. 'random' play with a random player
         :param muzero_player: MuZero's turn order
-            1. -1       play first or MuZero is the only player (self-play or 1p games)
+            1. 0        play first or MuZero is the only player (self-play or 1p games)
             2. 1        play second
         :param render: Whether to render the game
         """
@@ -93,7 +81,7 @@ class SelfPlay:
 
         with torch.no_grad():
             while True:
-                to_play = self.game.to_play
+                to_play = self.game.to_play()
                 if opponent == 'self' or muzero_player == to_play:
                     stacked_observations = game_history.stack_n_observations(
                         -1,

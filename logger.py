@@ -105,10 +105,10 @@ class Logger:
                     counter
                 )
                 writer.add_scalar('2.Workers/6.Learning_rate', info['lr'], counter)
-                writer.add_scalar('3.Loss/1.Total_weighted_loss', info['loss'], info['training_step'])
-                writer.add_scalar('3.Loss/2.Value_loss', info['value_loss'], info['training_step'])
-                writer.add_scalar('3.Loss/3.Reward_loss', info['reward_loss'], info['training_step'])
-                writer.add_scalar('3.Loss/4.Policy_loss', info['policy_loss'], info['training_step'])
+                writer.add_scalar('3.Loss/1.Total_weighted_loss', info['loss'], counter)
+                writer.add_scalar('3.Loss/2.Value_loss', info['value_loss'], counter)
+                writer.add_scalar('3.Loss/3.Reward_loss', info['reward_loss'], counter)
+                writer.add_scalar('3.Loss/4.Policy_loss', info['policy_loss'], counter)
                 print(f'\rEpisode return: {info["episode_return"]:.2f}. '
                       + f'Training step: {info["training_step"]}/{config.training_steps}. '
                       + f'Played games: {info["played_games"]}. '
@@ -122,7 +122,7 @@ class Logger:
                     last_step += 1
 
                 counter += 1
-                # time.sleep(0.5)
+                time.sleep(0.5)
         except KeyboardInterrupt:
             pass
         self.save_replay_buffer(
@@ -141,7 +141,7 @@ class Logger:
         else:
             p1_wr = np.mean([
                 sum(reward for i, reward in enumerate(history.rewards)
-                if history.to_plays[i] == -1) for history in histories
+                if history.to_plays[i] == 0) for history in histories
             ])
             p2_wr = np.mean([
                 sum(reward for i, reward in enumerate(history.rewards)

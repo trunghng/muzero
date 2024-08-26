@@ -1,0 +1,52 @@
+{
+    "game": "cartpole",
+    "workers":  2,
+    "seed": 0,
+    "max_moves":    500,
+    "simulations":  50,
+    "gamma":    0.997,
+    "root_dirichlet_alpha": 0.25,
+    "root_exploration_fraction":    0.25,
+    "c_base":   19625,
+    "c_init":   1.25,
+    "opponent": "random",
+    "muzero_player":    0,
+    "gpu":  false,
+    "stacked_observations": 1,
+    "stack_action": false,
+    "network":  "mlp",
+    "encoding_size":    8,
+    "fc_reward_layers":  [
+        16
+    ],
+    "fc_policy_layers":  [
+        16
+    ],
+    "fc_value_layers":   [
+        16
+    ],
+    "fc_representation_layers":   [
+    ],
+    "fc_hidden_state_layers":   [
+        16
+    ],
+    "downsample":   false,
+    "batch_size":   128,
+    "checkpoint_interval":  10,
+    "buffer_size":  500,
+    "td_steps": 5,
+    "unroll_steps": 5,
+    "training_steps":   10000,
+    "optimizer":    "Adam",
+    "lr":   0.007,
+    "momentum": 0.9,
+    "weight_decay": 1e-04,
+    "lr_decay_rate":    0.9,
+    "lr_decay_steps":   1000,
+    "support_limit":    10,
+    "value_loss_weight":    1,
+    "reanalyse_workers":    1,
+    "target_network_update_freq":   10,
+    "mcts_target_value":    true,
+    "mode": "train"
+}

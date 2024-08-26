@@ -197,12 +197,11 @@ class MCTS:
             parent = search_path[-2]
             policy_logits, hidden_state, value, reward = network.recurrent_inference(
                 parent.hidden_state,
-                ftensor(action_encoder(history[-1])).unsqueeze(0).unsqueeze(0)
+                ftensor(action_encoder(history[-1])).unsqueeze(0)
             )
 
-            if self.config.players == 2:
-                to_play = -1 if len(history) % self.config.players == 1 else 1
-            node.expand(reward, hidden_state, policy_logits, to_play, range(self.config.action_space_size))
+            to_play = len(history) % self.config.players
+            node.expand(reward.item(), hidden_state, policy_logits, to_play, range(self.config.action_space_size))
 
-            self.backpropagate(search_path, value, to_play, min_max_stats)
+            self.backpropagate(search_path, value.item(), to_play, min_max_stats)
         return root

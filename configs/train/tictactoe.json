@@ -1,0 +1,52 @@
+{
+    "game": "tictactoe",
+    "size": 3,
+    "workers":  2,
+    "seed": 0,
+    "max_moves":    9,
+    "simulations":  50,
+    "gamma":    1,
+    "root_dirichlet_alpha": 0.2,
+    "root_exploration_fraction":    0.25,
+    "c_base":   19625,
+    "c_init":   1.25,
+    "opponent": "random",
+    "muzero_player":    0,
+    "gpu":  false,
+    "stacked_observations": 1,
+    "stack_action": false,
+    "network":  "resnet",
+    "blocks":   1,
+    "channels": 16,
+    "reduced_channels_reward":  8,
+    "reduced_channels_policy":  8,
+    "reduced_channels_value":   8,
+    "resnet_fc_reward_layers":  [
+        16
+    ],
+    "resnet_fc_policy_layers":  [
+        16
+    ],
+    "resnet_fc_value_layers":   [
+        16
+    ],
+    "downsample":   false,
+    "batch_size":   128,
+    "checkpoint_interval":  10,
+    "buffer_size":  3000,
+    "td_steps": 5,
+    "unroll_steps": 5,
+    "training_steps":   10000,
+    "optimizer":    "Adam",
+    "lr":   0.003,
+    "momentum": 0.9,
+    "weight_decay": 1e-05,
+    "lr_decay_rate":    0.9,
+    "lr_decay_steps":   10000,
+    "support_limit":    1,
+    "value_loss_weight":    0.25,
+    "reanalyse_workers":    1,
+    "target_network_update_freq":   5,
+    "mcts_target_value":    true,
+    "mode": "train"
+}

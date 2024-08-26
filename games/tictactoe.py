@@ -11,12 +11,6 @@ class TicTacToe(BoardGame):
     def __init__(self, size: int=3) -> None:
         super().__init__(size, [3, size, size])
 
-    def reset(self) -> ObsType:
-        self.board = np.zeros((self.size, self.size))
-        self.to_play = -1
-        self.winner = None
-        return self.observation()
-
     def terminated(self) -> bool:
         """Whether the game is terminated"""
         sums = []
@@ -54,8 +48,8 @@ class TicTacToe(BoardGame):
         return [cell_to_action(c, self.size) for c in empty_cells]
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
-        self.board[action_to_cell(action, self.size)] = self.to_play
-        self.to_play *= -1
+        self.board[action_to_cell(action, self.size)] = self._to_play
+        self._to_play *= -1
         terminated = self.terminated()
         reward = 1 if (self.winner is not None and self.winner != 0) else 0
         return self.observation(), reward, terminated
@@ -63,7 +57,7 @@ class TicTacToe(BoardGame):
     def observation(self) -> ObsType:
         p1_plane = np.where(self.board == -1, 1, 0)
         p2_plane = np.where(self.board == 1, 1, 0)
-        to_play_plane = np.full_like(self.board, self.to_play)
+        to_play_plane = np.full_like(self.board, self._to_play)
         return np.array([p1_plane, p2_plane, to_play_plane])
 
     def action_encoder(self, action: ActType) -> ActType:
@@ -79,3 +73,6 @@ class TicTacToe(BoardGame):
         :param training_step: current training step
         """
         return 1.0
+
+    def to_play(self) -> int:
+        return 0 if self._to_play == -1 else 1

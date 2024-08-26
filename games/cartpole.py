@@ -10,7 +10,7 @@ from games.game import Game, ActType, ObsType
 class CartPole(Game):
 
     def __init__(self, render: bool=False) -> None:
-        super().__init__(1, [1, 1, 4], 2, False)
+        super().__init__(1, [1, 1, 4], 2)
         if render:
             env = gym.make('CartPole-v1', render_mode='rgb_array')
             self.env = RecordVideo(env, disable_logger=True)
@@ -18,17 +18,19 @@ class CartPole(Game):
             self.env = gym.make('CartPole-v1')
 
     def reset(self) -> ObsType:
-        return np.array([[self.env.reset()]])
+        return np.array([[self.env.reset()[0]]])
 
     def legal_actions(self) -> List[ActType]:
         return list(range(2))
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
         observation, reward, terminated, _, _ = self.env.step(action)
-        return observation, reward, terminated
+        return np.array([[observation]]), reward, terminated
 
     def action_encoder(self, action: ActType) -> ActType:
-        pass
+        one_hot_action = np.zeros(self.action_space_size)
+        one_hot_action[action] = 1
+        return one_hot_action
 
     def visit_softmax_temperature_func(self,
                                        training_steps: int,

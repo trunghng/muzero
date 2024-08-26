@@ -134,13 +134,26 @@ def normalize_hidden_state(hidden_states: torch.Tensor) -> torch.Tensor:
     Scale hidden states to [0, 1]:
         s_scaled = (s - min(s)) / (max(s) - min(s))
 
-    :param hidden_states: batch of hidden states
+    :param hidden_states: (B x channels x h/16 x w/16) | (B x channels x h x w)
     """
     # Scale hidden state into [0, 1], performed strictly over one example, not batch
     hidden_states_ = hidden_states.view(-1, hidden_states.shape[1], hidden_states.shape[2] * hidden_states.shape[3])
     # Also insert one dim to make broadcasting valid
     hidden_states_max = torch.max(hidden_states_, dim=2)[0].unsqueeze(-1).unsqueeze(-1)
     hidden_states_min = torch.min(hidden_states_, dim=2)[0].unsqueeze(-1).unsqueeze(-1)
+    hidden_states_scaled = (hidden_states - hidden_states_min) / (hidden_states_max - hidden_states_min + 1e-5)
+    return hidden_states_scaled
+
+
+def mlp_normalize_hidden_state(hidden_states: torch.Tensor) -> torch.Tensor:
+    """
+    Scale hidden states to [0, 1]:
+        s_scaled = (s - min(s)) / (max(s) - min(s))
+
+    :param hidden_states: (B x encoding_size)
+    """
+    hidden_states_max = torch.max(hidden_states, dim=1, keepdim=True)[0]
+    hidden_states_min = torch.min(hidden_states, dim=1, keepdim=True)[0]
     hidden_states_scaled = (hidden_states - hidden_states_min) / (hidden_states_max - hidden_states_min + 1e-5)
     return hidden_states_scaled
 

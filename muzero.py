@@ -46,7 +46,7 @@ class MuZero:
         self.logger = Logger(self.config.exp_name)
         self.logger.save_config(vars(deepcopy(self.config)))
 
-        if config.logdir:
+        if hasattr(config, 'logdir') and config.logdir:
             self.load_model()
 
     def train(self) -> None:

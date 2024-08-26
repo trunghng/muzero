@@ -51,6 +51,9 @@ class Game(ABC):
     def render(self) -> None:
         """"""
 
+    def to_play(self) -> PlayerType:
+        return 0
+
 
 class BoardGame(Game):
 
@@ -59,9 +62,15 @@ class BoardGame(Game):
                  observation_dim: List[int]) -> None:
         super().__init__(2, observation_dim, size**2)
         self.size = size
-        self.board = np.zeros((size, size))     # -1, 1, 0 denote X, O, empty respectively
-        self.to_play = -1                       # X moves first
+        self.reset()
+
+    def reset(self) -> ObsType:
+        # -1, 1, 0 denote X, O, empty respectively
+        self.board = np.zeros((self.size, self.size))
+        # X moves first
+        self._to_play = -1
         self.winner = None
+        return self.observation()
 
     def render(self) -> None:
         draw_board(self.board, {-1: 'X', 1: 'O', 0: ' '})
@@ -156,7 +165,7 @@ class GameHistory:
         """
         Compute episode return w.r.t the perspective of the player,
         assuming that the game is over
-            G = r_1 + gamma * r_2 + ... + gamma^{T-1} * r_T
+            G = r_1 + r_2 + ... + r_T
 
         :param gamma: discount factor
         :param player: player turn
@@ -172,7 +181,7 @@ class GameHistory:
         eps_return = __get_reward(self.rewards[-1], len(self.observations) - 1)
         for i, r in enumerate(reversed(self.rewards[0:-1])):
             reward = __get_reward(r, len(self.observations) - i)
-            eps_return = eps_return * gamma + reward
+            eps_return = eps_return + reward
         return eps_return
 
     def make_target(
@@ -222,8 +231,8 @@ class GameHistory:
                     bootstrap = 0
 
                 discounted_rewards = [
-                    (self.rewards[k] if self.to_plays[step + k] == self.to_plays[step] else -reward) * gamma ** k
-                    for k in range(step + 1, bootstrap_step + 1)
+                    (reward if self.to_plays[step + k] == self.to_plays[step] else -reward) * gamma ** k
+                    for k, reward in enumerate(self.rewards[step + 1: bootstrap_step + 1])
                 ]
                 value = sum(discounted_rewards) + bootstrap
             return value

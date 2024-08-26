@@ -22,19 +22,7 @@ class Reanalyser:
         set_seed(seed)
         self.game = game
         self.config = config
-        self.target_network = MuZeroNetwork(config.observation_dim,
-                                     config.action_space_size,
-                                     config.stacked_observations,
-                                     config.blocks,
-                                     config.channels,
-                                     config.reduced_channels_reward,
-                                     config.reduced_channels_policy,
-                                     config.reduced_channels_value,
-                                     config.fc_reward_layers,
-                                     config.fc_policy_layers,
-                                     config.fc_value_layers,
-                                     config.downsample,
-                                     config.support_limit)
+        self.target_network = MuZeroNetwork(config)
         self.target_network.set_weights(initial_checkpoint['model_state_dict'])
         self.target_network.eval()
         self.mcts = MCTS(self.config)
@@ -70,7 +58,7 @@ class Reanalyser:
                 values = [
                     self.target_network.initial_inference(
                         ftensor(observation).unsqueeze(0)
-                    )[2] for observation in observations
+                    )[2].item() for observation in observations
                 ]
 
             action_probabilities, root_values = [], []

@@ -59,7 +59,7 @@ class ReplayBuffer:
     def sample(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         :return observation_batch:  (B x (stack_obs * channels) x h x w)
-        :return action_batch:       (B x (unroll_steps + 1))
+        :return action_batch:       (B x (unroll_steps + 1) x h x w)
         :return value_target_batch: (B x (unroll_steps + 1))
         :return reward_target_batch:(B x (unroll_steps + 1))
         :return policy_target_batch:(B x (unroll_steps + 1) x action_space_size)
