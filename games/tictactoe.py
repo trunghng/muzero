@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from games.game import BoardGame, ActType, ObsType
+from games.game import BoardGame, ObsType
 from utils.game_utils import action_to_cell, cell_to_action
 
 
@@ -43,11 +43,14 @@ class TicTacToe(BoardGame):
 
         return terminated
 
-    def legal_actions(self) -> List[ActType]:
+    def legal_actions(self) -> np.ndarray:
         empty_cells = np.argwhere(self.board == 0)
-        return [cell_to_action(c, self.size) for c in empty_cells]
+        empty_cells = [cell_to_action(c, self.size) for c in empty_cells]
+        actions = np.zeros(self.size ** 2)
+        actions[empty_cells] = 1
+        return actions
 
-    def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
+    def step(self, action: int) -> Tuple[ObsType, float, bool]:
         self.board[action_to_cell(action, self.size)] = self._to_play
         self._to_play *= -1
         terminated = self.terminated()
@@ -60,7 +63,7 @@ class TicTacToe(BoardGame):
         to_play_plane = np.full_like(self.board, self._to_play)
         return np.array([p1_plane, p2_plane, to_play_plane])
 
-    def action_encoder(self, action: ActType) -> ActType:
+    def action_encoder(self, action: int) -> int:
         one_hot_action = np.zeros((self.size, self.size))
         one_hot_action[action_to_cell(action, self.size)] = 1
         return one_hot_action

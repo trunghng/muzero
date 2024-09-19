@@ -62,8 +62,8 @@ class Trainer:
     def update_weights(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
     ) -> Tuple[float, float, float, float]:
-        # (B x (stack_obs * channels) x h x w), (B x (unroll_steps + 1)), (B x (unroll_steps + 1)),
-        # (B x (unroll_steps + 1)), (B x (unroll_steps + 1) x action_space_size)
+        # (B x (n_stack_obs * channels) x h x w), (B x (unroll_steps + 1)), (B x (unroll_steps + 1)),
+        # (B x (unroll_steps + 1)), (B x (unroll_steps + 1) x n_actions)
         observation_batch, action_batch, value_target_batch, reward_target_batch, policy_target_batch\
                             = map(lambda x: x.to(self.config.device), batch)
         # (B x (unroll_steps + 1) x support_size), (B x (unroll_steps + 1) x support_size)

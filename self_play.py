@@ -1,3 +1,4 @@
+from datetime import datetime as dt
 from typing import Any, Dict
 
 import numpy as np
@@ -5,7 +6,7 @@ import ray
 import torch
 
 from games.game import Game, GameHistory
-from mcts import MCTS
+from mcts.mcts import MCTS
 from player import HumanPlayer, RandomPlayer
 from network import MuZeroNetwork
 from replay_buffer import ReplayBuffer
@@ -60,7 +61,7 @@ class SelfPlay:
              temperature: float,
              opponent: str,
              muzero_player: int,
-             render: bool=False) -> GameHistory:
+             render: bool = False) -> GameHistory:
         """Play a game with MuZero player
 
         :param temperature:
@@ -84,21 +85,18 @@ class SelfPlay:
                 if opponent == 'self' or muzero_player == to_play:
                     stacked_observations = game_history.stack_n_observations(
                         -1,
-                        self.config.stacked_observations,
-                        self.config.action_space_size,
+                        self.config.n_stacked_observations,
+                        self.config.n_actions,
                         self.config.stack_action
                     )
-                    root = self.mcts.search(
+                    action, root_value, action_probs = self.mcts.search(
                         self.network,
                         stacked_observations,
                         self.game.legal_actions(),
-                        game_history.actions,
                         self.game.action_encoder,
-                        to_play
+                        to_play,
+                        temperature
                     )
-                    action = self.mcts.select_action(root, temperature)
-                    action_probs = self.mcts.action_probabilities(root)
-                    root_value = root.value()
                 elif opponent == 'human':
                     action = HumanPlayer().play(self.game)
                     root_value, action_probs = None, None

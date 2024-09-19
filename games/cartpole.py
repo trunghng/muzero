@@ -1,9 +1,9 @@
-from typing import List, Tuple
+from typing import Tuple
 
 import gymnasium as gym
 import numpy as np
 
-from games.game import Game, ActType, ObsType
+from games.game import Game, ObsType
 
 
 class CartPole(Game):
@@ -18,15 +18,15 @@ class CartPole(Game):
     def reset(self) -> ObsType:
         return np.array([[self.env.reset()[0]]])
 
-    def legal_actions(self) -> List[ActType]:
-        return list(range(2))
+    def legal_actions(self) -> np.ndarray:
+        return np.ones(2)
 
-    def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
+    def step(self, action: int) -> Tuple[ObsType, float, bool]:
         observation, reward, terminated, _, _ = self.env.step(action)
         return np.array([[observation]]), reward, terminated
 
-    def action_encoder(self, action: ActType) -> ActType:
-        one_hot_action = np.zeros(self.action_space_size)
+    def action_encoder(self, action: int) -> int:
+        one_hot_action = np.zeros(self.n_actions)
         one_hot_action[action] = 1
         return one_hot_action
 

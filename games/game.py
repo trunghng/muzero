@@ -7,8 +7,6 @@ from utils.game_utils import draw_board
 
 
 ObsType = TypeVar('ObsType')
-ActType = TypeVar('ActType')
-PlayerType = TypeVar('PlayerType')
 
 
 class Game(ABC):
@@ -17,25 +15,25 @@ class Game(ABC):
     def __init__(self,
                  players: int,
                  observation_dim: List[int],
-                 action_space_size: int) -> None:
+                 n_actions: int) -> None:
         self.players = players
         self.observation_dim = observation_dim
-        self.action_space_size = action_space_size
+        self.n_actions = n_actions
 
     @abstractmethod
     def reset(self) -> ObsType:
         """"""
 
     @abstractmethod
-    def legal_actions(self) -> List[ActType]:
+    def legal_actions(self) -> np.ndarray:
+        """Returns a mask of legal actions, 1 for ech valid action and 0 otherwise"""
+
+    @abstractmethod
+    def step(self, action: int) -> Tuple[ObsType, float, bool]:
         """"""
 
     @abstractmethod
-    def step(self, action: ActType) -> Tuple[ObsType, float, bool]:
-        """"""
-
-    @abstractmethod
-    def action_encoder(self, action: ActType) -> ActType:
+    def action_encoder(self, action: int) -> int:
         """"""
 
     @abstractmethod
@@ -51,7 +49,7 @@ class Game(ABC):
     def render(self) -> None:
         """"""
 
-    def to_play(self) -> PlayerType:
+    def to_play(self) -> int:
         return 0
 
 
@@ -100,9 +98,9 @@ class GameHistory:
 
     def save(self,
              observation: ObsType,
-             action: ActType,
+             action: int,
              reward: float,
-             to_play: PlayerType,
+             to_play: int,
              pi: List[float],
              root_value: float) -> None:
         self.observations.append(observation)
@@ -122,7 +120,7 @@ class GameHistory:
     def stack_n_observations(self,
                              t: int,
                              n: int,
-                             action_space_size: int,
+                             n_actions: int,
                              stack_action: bool) -> np.ndarray:
         """
         Stack n most recent observations (and corresponding actions lead
@@ -130,7 +128,7 @@ class GameHistory:
 
         :param t: time step of the latest observation to stack
         :param n: number of observations to stack
-        :param action_space_size: size of the action space
+        :param n_actions: size of the action space
         :param stack_action: whether to stack historical actions
         """
         planes = []
@@ -151,7 +149,7 @@ class GameHistory:
                 planes.append(self.observations[step])
                 if stack_action:
                     planes.append(np.full_like(self.observations[step],
-                        self.actions[step] / action_space_size))
+                        self.actions[step] / n_actions))
 
             # If n_stack_observations > t + 1, we attach planes of zeros instead
             for _ in range(n - n_):
@@ -161,7 +159,7 @@ class GameHistory:
 
         return np.concatenate(planes, axis=0)
 
-    def compute_return(self, gamma: float, player: PlayerType, players: int) -> float:
+    def compute_return(self, gamma: float, player: int, players: int) -> float:
         """
         Compute episode return w.r.t the perspective of the player,
         assuming that the game is over
@@ -173,7 +171,7 @@ class GameHistory:
         """
         def __get_reward(reward, time_step):
             if players == 2 and ((time_step % 2 == 0 and player == 1)\
-            or (time_step % 2 == 1 and player == -1)):
+                or (time_step % 2 == 1 and player == 0)):
                 return -reward
             else:
                 return reward
@@ -190,7 +188,7 @@ class GameHistory:
         td_steps: int,
         gamma: float,
         unroll_steps: int,
-        action_space_size: int
+        n_actions: int
     ) -> Tuple[List[float], List[float], List[List[float]]]:
         """
         Create targets for every unroll steps
@@ -199,7 +197,7 @@ class GameHistory:
         :param td_steps: n-step TD
         :param gamma: discount factor
         :param unroll_steps: number of unroll steps
-        :param action_space_size: size of the action space
+        :param n_actions: size of the action space
         :return: value targets, reward targets, policy targets
         """
         value_targets, reward_targets, policy_targets = [], [], []
@@ -250,6 +248,6 @@ class GameHistory:
             else:
                 value_targets.append(0)
                 reward_targets.append(0)
-                policy_targets.append([1 / action_space_size] * action_space_size)
+                policy_targets.append([1 / n_actions] * n_actions)
 
         return value_targets, reward_targets, policy_targets

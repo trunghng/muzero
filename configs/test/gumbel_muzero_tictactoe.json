@@ -1,0 +1,22 @@
+{
+    "game": "tictactoe",
+    "size": 3,
+    "exp_name": "gumbel_muzero_tictactoe_test",
+    "workers":  4,
+    "seed": 0,
+    "max_moves":    9,
+    "simulations":  50,
+    "gamma":    1,
+    "gumbel":   true,
+    "max_considered_actions":   16,
+    "c_visit":  50,
+    "c_scale":  1.0,
+    "gumbel_scale": 0.0,
+    "opponent": "random",
+    "muzero_player":    0,
+    "logdir":   "data/gumbel_muzero_tictactoe_train",
+    "tests":    200,
+    "render":   false,
+    "mode": "test",
+    "comment":  "This config assumes that there exist a model checkpoint and a config file under data/gumbel_muzero_tictactoe_train"
+}

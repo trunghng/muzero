@@ -1,5 +1,4 @@
 import argparse
-from argparse import RawTextHelpFormatter
 import json
 import os.path as osp
 import sys
@@ -25,13 +24,92 @@ def create_game(args) -> Game:
 		pass
 
 
+def validate_args(parser, args):
+	def validate1(required_tags):
+		unspecified_tags = [k for k in required_tags if required_tags[k] is None]
+		if unspecified_tags:
+			parser.error(f'{", ".join(unspecified_tags)} must be specified.')
+
+	def validate2(tag_value, value_wanted, tag, tag_dict):
+		unspecified_tags = [k for k in tag_dict if tag_dict[k] is None]
+		if tag_value == value_wanted and unspecified_tags:
+			parser.error(f'{", ".join(unspecified_tags)} must be specified \
+				when {tag}={value_wanted}.')
+
+	validate1({
+		'--workers': args.workers,
+		'--seed': args.seed,
+		'--max-moves': args.max_moves,
+		'--simulations': args.simulations,
+		'--gamma': args.gamma,
+	})
+	if args.mode == 'train':
+		if args.game in ['tictactoe', 'cartpole'] and args.downsample:
+			parser.error(f'Downsampling does not work with {args.game}.')
+		validate1({
+			'--n-stacked-observations': args.n_stacked_observations,
+			'--network': args.network,
+			'--batch-size': args.batch_size,
+			'--checkpoint-interval': args.checkpoint_interval,
+			'--buffer-size': args.buffer_size,
+			'--td-steps': args.td_steps,
+			'--unroll-steps': args.unroll_steps,
+			'--training-steps': args.training_steps,
+			'--optimizer': args.optimizer,
+			'--lr': args.lr,
+			'--weight-decay': args.weight_decay,
+			'--lr-decay-rate': args.lr_decay_rate,
+			'--lr-decay-steps': args.lr_decay_steps,
+			'--support-limit': args.support_limit,
+			'--value-loss-weight': args.value_loss_weight,
+			'--reanalyse-workers': args.reanalyse_workers,
+			'--target-network-update-freq': args.target_network_update_freq
+		})
+	else:
+		validate1({'--tests': args.tests})
+	validate2(args.game, 'tictactoe', '--game', {'--size': args.size})
+	validate2(args.gumbel, True, '--gumbel', {
+		'--max-considered-actions': args.max_considered_actions,
+		'--c-visit': args.c_visit,
+		'--c-scale': args.c_scale,
+		'--gumbel-scale': args.gumbel_scale
+	})
+	validate2(args.gumbel, False, '--gumbel', {
+		'--dirichlet-alpha': args.dirichlet_alpha,
+		'--exploration-frac': args.exploration_frac,
+		'--c-base': args.c_base,
+		'--c-init': args.c_init
+	})
+	validate2(args.network, 'resnet', '--network', {
+		'--blocks': args.blocks,
+		'--channels': args.channels,
+		'--reduced-channels-reward': args.reduced_channels_reward,
+		'--reduced-channels-policy': args.reduced_channels_policy,
+		'--reduced-channels-value': args.reduced_channels_value,
+		'--resnet-fc-reward-layers': args.resnet_fc_reward_layers,
+		'--resnet-fc-policy-layers': args.resnet_fc_policy_layers,
+		'--resnet-fc-value-layers': args.resnet_fc_value_layers
+	})
+	validate2(args.network, 'resnet', '--mlp', {
+		'--encoding-size': args.encoding_size,
+		'--fc-reward-layers': args.fc_reward_layers,
+		'--fc-policy-layers': args.fc_policy_layers,
+		'--fc-value-layers': args.fc_value_layers,
+		'--fc-representation-layers': args.fc_representation_layers,
+		'--fc-hidden-state-layers': args.fc_hidden_state_layers
+	})
+	validate2(args.optimizer, 'SGD', '--optimizer', {
+		'--momentum': args.momentum
+	})
+
+
 def main() -> None:
-	parser = argparse.ArgumentParser(description='MuZero')
+	parser = argparse.ArgumentParser(description='MuZero/Gumbel MuZero')
 
 	mode_parsers = parser.add_subparsers(title='Modes')
-	train_parser = mode_parsers.add_parser('train', formatter_class=RawTextHelpFormatter)
+	train_parser = mode_parsers.add_parser('train', formatter_class=argparse.RawTextHelpFormatter)
 	train_parser.set_defaults(mode='train')
-	test_parser = mode_parsers.add_parser('test', formatter_class=RawTextHelpFormatter)
+	test_parser = mode_parsers.add_parser('test', formatter_class=argparse.RawTextHelpFormatter)
 	test_parser.set_defaults(mode='test')
 
 	for p in [train_parser, test_parser]:
@@ -51,31 +129,41 @@ def main() -> None:
 					   help='Number of MCTS simulations')
 		p.add_argument('--gamma', type=float,
 					   help='Discount factor')
-		p.add_argument('--root-dirichlet-alpha', type=float,
+		p.add_argument('--gumbel', action='store_true',
 					   help='')
-		p.add_argument('--root-exploration-fraction', type=float,
+		p.add_argument('--max-considered-actions', type=int,
+					   help='Maximum number of actions sampled without replacement in Gumbel MuZero')
+		p.add_argument('--c-visit', type=int,
+					   help='')
+		p.add_argument('--c-scale', type=float,
+					   help='')
+		p.add_argument('--gumbel-scale', type=float,
+					   help='')
+		p.add_argument('--dirichlet-alpha', type=float,
+					   help='')
+		p.add_argument('--exploration-frac', type=float,
 					   help='')
 		p.add_argument('--c-base', type=float,
 					   help='')
 		p.add_argument('--c-init', type=float,
 					   help='')
-		p.add_argument('--opponent', type=str, choices=['self', 'human', 'random'],
+		p.add_argument('--opponent', type=str, choices=['self', 'human', 'random'], default='random',
 					   help='Opponent to test, or evalute in train mode:\n'
 					   '   1. self: play with itself\n'
 					   '   2. human: play with a human\n'
 					   '   3. random: play with a random player')
-		p.add_argument('--muzero-player', type=int, choices=[0, 1],
+		p.add_argument('--muzero-player', type=int, choices=[0, 1], default=0,
 					   help="MuZero's turn order in test, or in evaluation during train:\n"
 					   '   1. 0: plays first or MuZero is the only player (self-play or 1p games)\n'
 					   '   2. 1: plays second')
 		p.add_argument('--logdir', type=str,
 					   help='Path to the log directory, which stores model file, config file, etc')
-		p.add_argument('--use-saved-config', action='store_true',
-					   help='Whether to use saved config')
+		p.add_argument('--config-path', type=str,
+					   help='Path to the config file')
 
 	train_parser.add_argument('--gpu', action='store_true',
 							  help='Whether to enable GPU (if available)')
-	train_parser.add_argument('--stacked-observations', type=int,
+	train_parser.add_argument('--n-stacked-observations', type=int,
 							  help='')
 	train_parser.add_argument('--stack-action', action='store_true',
 							  help='Whether to attach historical actions when stacking observations')
@@ -149,22 +237,19 @@ def main() -> None:
 							  help='Whether to use value function obtained from re-executing MCTS in '
 							  'Reanalyse as target for training')
 
-	test_parser.add_argument('--tests', type=int, default=100,
+	test_parser.add_argument('--tests', type=int,
 							 help='Number of games for testing')
 	test_parser.add_argument('--render', action='store_true',
 							 help='Whether to render each game during testing')
 	args = parser.parse_args()
 
-	if args.game in ['tictactoe', 'cartpole'] and hasattr(args, 'downsample') and args.downsample:
-		parser.error('Downsampling does not work with the selected environment.')
-
-	if args.use_saved_config:
-		temp = args.exp_name
-		with open(osp.join('configs', args.mode, f'{args.game}.json')) as f:
+	if args.config_path is not None:
+		with open(args.config_path) as f:
 			args = json.load(f, object_hook=lambda d: SimpleNamespace(**d))
 		if hasattr(args, 'comment'):
 			del args.comment
-		args.exp_name = temp
+	else:
+		validate_args(parser, args)
 
 	if args.mode == 'train':
 		if hasattr(args, 'logdir') and args.logdir:
@@ -179,18 +264,17 @@ def main() -> None:
 		game = create_game(args)
 		args.players = game.players
 		args.observation_dim = game.observation_dim
-		args.action_space_size = game.action_space_size
+		args.n_actions = game.n_actions
 		args.visit_softmax_temperature_func = game.visit_softmax_temperature_func
 		args.device = 'cuda:0' if torch.cuda.is_available() and args.gpu else 'cpu'
-		if temp is None:
-			if args.network == 'resnet':
-				del args.encoding_size, args.fc_reward_layers, args.fc_policy_layers,\
-					args.fc_value_layers, args.fc_representation_layers, args.fc_hidden_state_layers
-			else:
-				del args.blocks, args.channels, args.reduced_channels_reward,\
-					args.reduced_channels_policy, args.reduced_channels_value,\
-					args.resnet_fc_reward_layers, args.resnet_fc_policy_layers,\
-					args.resnet_fc_value_layers
+		# if args.network == 'resnet':
+		# 	del args.encoding_size, args.fc_reward_layers, args.fc_policy_layers,\
+		# 		args.fc_value_layers, args.fc_representation_layers, args.fc_hidden_state_layers
+		# else:
+		# 	del args.blocks, args.channels, args.reduced_channels_reward,\
+		# 		args.reduced_channels_policy, args.reduced_channels_value,\
+		# 		args.resnet_fc_reward_layers, args.resnet_fc_policy_layers,\
+		# 		args.resnet_fc_value_layers
 		muzero = MuZero(game, args)
 		muzero.train()
 	else:
@@ -207,8 +291,8 @@ def main() -> None:
 		game = create_game(args)
 		args.players = game.players
 		args.observation_dim = game.observation_dim
-		args.action_space_size = game.action_space_size
-		args.stacked_observations = config['stacked_observations']
+		args.n_actions = game.n_actions
+		args.n_stacked_observations = config['n_stacked_observations']
 		args.network = config['network']
 		if args.network == 'resnet':
 			args.blocks = config['blocks']

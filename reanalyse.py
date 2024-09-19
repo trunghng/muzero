@@ -4,7 +4,7 @@ from typing import Any, Dict
 import ray
 
 from games.game import Game
-from mcts import MCTS
+from mcts.mcts import MCTS
 from network import MuZeroNetwork
 from replay_buffer import ReplayBuffer
 from shared_storage import SharedStorage
@@ -48,8 +48,8 @@ class Reanalyser:
             observations = [
                 game_history.stack_n_observations(
                     t,
-                    self.config.stacked_observations,
-                    self.config.action_space_size,
+                    self.config.n_stacked_observations,
+                    self.config.n_actions,
                     self.config.stack_action
                 ) for t in range(len(game_history))
             ]
@@ -63,17 +63,15 @@ class Reanalyser:
 
             action_probabilities, root_values = [], []
             for t, observation in enumerate(observations):
-                root = self.mcts.search(
+                _, root_value, action_probs = self.mcts.search(
                     self.target_network,
                     observation,
                     self.game.legal_actions(),
-                    game_history.actions,
                     self.game.action_encoder,
                     game_history.to_plays[t]
                 )
-                action_probabilities.append(self.mcts.action_probabilities(root))
-                root_values.append(root.value())
-
+                action_probabilities.append(action_probs)
+                root_values.append(root_value)
             game_history.save_reanalysed_stats(
                 action_probabilities,
                 root_values if self.config.mcts_target_value else values
