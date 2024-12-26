@@ -19,5 +19,5 @@ The code is heavily inspired by these repos:
 - [mctx](https://github.com/google-deepmind/mctx)
 
 ## References
-[1] Julian Schrittwieser, Ioannis Antonoglou, Thomas Hubert, David Silver et al. [Mastering Atari, Go, chess and shogi by planning with a learned model](https://doi.org/10.1038/s41586-020-03051-4). Nature 588, 604–609, 2020.
+[1] Julian Schrittwieser, Ioannis Antonoglou, Thomas Hubert, David Silver et al. [Mastering Atari, Go, chess and shogi by planning with a learned model](https://doi.org/10.1038/s41586-020-03051-4). Nature 588, 604–609, 2020.  
 [2] Ivo Danihelka, Arthur Guez, Julian Schrittwieser, David Silver. [Policy improvement by planning with Gumbel](https://openreview.net/forum?id=bERaNdoegnO). ICLR, 2022
