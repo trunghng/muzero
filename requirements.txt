@@ -1,0 +1,6 @@
+gymnasium==0.29.1
+numpy==1.26.4
+ray==2.10.0
+tensorboard==2.17.1
+torch==2.2.2
+torchvision==0.17.2

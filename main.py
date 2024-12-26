@@ -24,7 +24,7 @@ def create_game(args) -> Game:
 		pass
 
 
-def validate_args(parser, args):
+def validate_args(parser, args) -> None:
 	def validate1(required_tags):
 		unspecified_tags = [k for k in required_tags if required_tags[k] is None]
 		if unspecified_tags:
@@ -130,7 +130,7 @@ def main() -> None:
 		p.add_argument('--gamma', type=float,
 					   help='Discount factor')
 		p.add_argument('--gumbel', action='store_true',
-					   help='')
+					   help='Whether to use Gumbel MuZero')
 		p.add_argument('--max-considered-actions', type=int,
 					   help='Maximum number of actions sampled without replacement in Gumbel MuZero')
 		p.add_argument('--c-visit', type=int,

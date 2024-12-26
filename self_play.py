@@ -1,4 +1,3 @@
-from datetime import datetime as dt
 from typing import Any, Dict
 
 import numpy as np
@@ -7,8 +6,8 @@ import torch
 
 from games.game import Game, GameHistory
 from mcts.mcts import MCTS
-from player import HumanPlayer, RandomPlayer
 from network import MuZeroNetwork
+from player import HumanPlayer, RandomPlayer
 from replay_buffer import ReplayBuffer
 from shared_storage import SharedStorage
 from utils.utils import set_seed

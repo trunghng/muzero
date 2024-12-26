@@ -4,7 +4,7 @@ from typing import Callable, Tuple
 import math
 
 import numpy as np
-import pygraphviz
+# import pygraphviz
 
 from mcts import action_selection
 from mcts import qtransforms
@@ -251,34 +251,34 @@ class MCTS:
         # return action, qvalues[action], visit_probs
         return action, tree.node_values[tree.ROOT_INDEX], visit_probs
 
-    def visualize_tree(self, tree: Tree, output_file: str = None) -> None:
-        def node_to_str(node_i, reward=0):
-            return (f'{node_i}\n'
-                    f'Reward: {reward:.2f}\n'
-                    f'Value: {tree.node_values[node_i]:.2f}\n'
-                    f'Visits: {tree.node_visits[node_i]}\n'
-                    f'To play: {tree.to_play[node_i]}')
+    # def visualize_tree(self, tree: Tree, output_file: str = None) -> None:
+    #     def node_to_str(node_i, reward=0):
+    #         return (f'{node_i}\n'
+    #                 f'Reward: {reward:.2f}\n'
+    #                 f'Value: {tree.node_values[node_i]:.2f}\n'
+    #                 f'Visits: {tree.node_visits[node_i]}\n'
+    #                 f'To play: {tree.to_play[node_i]}')
 
-        def edge_to_str(node_i, a):
-            probs = softmax(tree.children_prior_logits[node_i])
-            return (f'{a}\n'
-                    f'Q: {tree.qvalues(node_i)[a]:.2f}\n'
-                    f'p: {probs[a]:.2f}')
+    #     def edge_to_str(node_i, a):
+    #         probs = softmax(tree.children_prior_logits[node_i])
+    #         return (f'{a}\n'
+    #                 f'Q: {tree.qvalues(node_i)[a]:.2f}\n'
+    #                 f'p: {probs[a]:.2f}')
 
-        graph = pygraphviz.AGraph(directed=True)
-        graph.add_node(0, label=f'{node_to_str(node_i=0)}', color='green')
-        for node_i in range(tree.n_simulations):
-            for a in range(tree.n_actions):
-                children_i = tree.children_index[node_i, a]
-                if children_i >= 0:
-                    graph.add_node(
-                        children_i,
-                        label=node_to_str(
-                            node_i=children_i,
-                            reward=tree.children_rewards[node_i, a]
-                        ),
-                        color='red'
-                    )
-                    graph.add_edge(node_i, children_i, label=edge_to_str(node_i, a))
-        output_file = output_file if output_file is not None else '/tmp/search_tree.png'
-        graph.draw(output_file, prog="dot")
+    #     graph = pygraphviz.AGraph(directed=True)
+    #     graph.add_node(0, label=f'{node_to_str(node_i=0)}', color='green')
+    #     for node_i in range(tree.n_simulations):
+    #         for a in range(tree.n_actions):
+    #             children_i = tree.children_index[node_i, a]
+    #             if children_i >= 0:
+    #                 graph.add_node(
+    #                     children_i,
+    #                     label=node_to_str(
+    #                         node_i=children_i,
+    #                         reward=tree.children_rewards[node_i, a]
+    #                     ),
+    #                     color='red'
+    #                 )
+    #                 graph.add_edge(node_i, children_i, label=edge_to_str(node_i, a))
+    #     output_file = output_file if output_file is not None else '/tmp/search_tree.png'
+    #     graph.draw(output_file, prog="dot")
